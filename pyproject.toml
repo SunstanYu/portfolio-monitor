@@ -1,0 +1,17 @@
+[project]
+name = "portfolio-monitor"
+version = "0.1.0"
+description = "个人多账户投资组合监测：每日快照、资产分配、TWR 收益率、风险提示、MCP"
+readme = "README.md"
+authors = [
+    { name = "Charles Yu", email = "yujincheng374@gmail.com" }
+]
+requires-python = ">=3.12"
+dependencies = []
+
+[project.scripts]
+portfolio-monitor = "portfolio_monitor:main"
+
+[build-system]
+requires = ["uv_build>=0.13.7,<0.14.0"]
+build-backend = "uv_build"
