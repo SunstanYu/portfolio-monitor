@@ -46,7 +46,9 @@
 - 存储：SQLite 单文件 `data/portfolio.sqlite`
 - 原始返回：每次同步的原始 JSON / XML 存档到 `data/raw/<日期>/<数据源>`，便于排查
 - 估值日：按美东日期；每日任务在美股收盘后运行
-- 手动持仓若填写了行情代码（如 `600519.SS`），每日尝试从 Yahoo 更新价格，失败则沿用上次价格
+- 手动持仓若填写了行情代码（如 `600519.SS`），每日尝试从 Yahoo 更新价格，失败则沿用上次价格（M5 实现；目前用手填价格）
+- **数据源失败**：沿用该账户最近一次快照并标记 `carried_forward`，净值标记为"含沿用数据"，不会凭空下跌
+- **汇率失败**：沿用最近一次汇率；完全没有汇率时当天不计算净值，并在同步报告里说明
 - **统一标的编号** `<市场>:<代码>`：`US:NVDA`、`HK:00700`（港股补足 5 位）、`CN:600519`、`CRYPTO:BTC`。各数据源在接入层把自己的写法转换成统一编号；识别不了的标的进入待处理列表，不静默丢弃。跨账户合并和集中度计算都依赖它
 - **迁移**：数据库结构带版本号，变更用按序号排列的 SQL 迁移脚本（`storage/migrations/0001_init.sql` …），启动时自动执行尚未执行的迁移
 - **可重放**：解析逻辑改进或新增字段后，可从 `data/raw/` 的原始存档重新生成历史快照，不必重新抓取
@@ -122,10 +124,13 @@ AWS 服务器（安全组不开放入站端口）
 
 ```
 src/portfolio_monitor/
+├── app.py      组装各层（打开数据库、迁移、同步账户配置、构建数据源和服务）
+├── config.py   配置加载
 ├── entry/      入口层：web/（路由 + 模板 + 表格定义）  mcp/  cli.py  scheduler.py
 ├── services/   服务层：query.py  edit.py  sync.py
-├── domain/     领域层：models.py  instruments.py  valuation.py  returns.py  rules/
-├── sources/    数据源：base.py（接口）  registry.py  ibkr.py  okx.py  usmart.py  manual.py  fake.py
+├── domain/     领域层：models.py  instruments.py  valuation.py  returns.py  aggregate.py  rules/
+├── sources/    数据源：base.py（接口 + 快照校验）  registry.py  fx.py（汇率）
+│               manual.py  fake.py  ibkr.py  okx.py  usmart.py
 └── storage/    数据层：db.py  repository.py  migrations/
 ```
 
@@ -141,8 +146,9 @@ src/portfolio_monitor/
 ```python
 class Source(Protocol):
     name: str
-    def fetch(self, as_of: date) -> SourceSnapshot: ...
-    # SourceSnapshot：持仓、现金、资金进出、原始返回
+    def fetch(self, as_of: date, accounts: Sequence[Account]) -> SourceSnapshot: ...
+    # 一个数据源可服务多个账户（如 manual）
+    # SourceSnapshot：持仓、现金、近期资金进出（可重复，按 external_id 去重）、标的资料、待处理标的、原始返回
 
 class Rule(Protocol):
     id: str
@@ -258,7 +264,7 @@ HOLDINGS = TableSpec(
 | # | 内容 | 状态 |
 |---|---|---|
 | M1 | 项目骨架、设计文档；清理本机 Ghostfolio | ✅ |
-| M2 | 核心：数据库与迁移、标的编号规范化、`Source` 接口 + 手动账户 + 假数据源、每日快照、汇率、TWR、通用聚合 | |
+| M2 | 核心：数据库与迁移、标的编号规范化、`Source` 接口 + 手动账户 + 假数据源、每日快照、汇率、TWR、通用聚合 | ✅ |
 | M3 | 网页：仪表盘、表格组件（列定义驱动）、手动账户编辑、修改日志、JSON 接口 | |
 | M4 | MCP 端点，本机用 Claude Code 测试 | |
 | M5 | 数据源：IBKR（含一年回填）→ OKX → 盈立 | |

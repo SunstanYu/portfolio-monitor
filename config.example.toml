@@ -1,0 +1,39 @@
+# 示例配置（虚构账户）。
+# 真实配置复制到 local/config.toml 再修改；local/ 不进 git。
+
+base_currency = "USD"
+
+[paths]
+data_dir = "data"
+
+[fx]
+provider = "frankfurter"   # frankfurter（欧洲央行参考汇率）| static（固定汇率，测试用）
+
+# 账户：source 对应 sources/registry.py 里注册的数据源
+[[accounts]]
+id = "demo-us"
+name = "示例美股账户"
+kind = "broker"            # broker | bank | crypto | other
+source = "fake"
+currency = "USD"
+include_in_returns = true  # 是否计入收益率（银行账户一般为 false）
+
+[[accounts]]
+id = "demo-hk"
+name = "示例港股账户"
+kind = "broker"
+source = "fake"
+currency = "HKD"
+
+[[accounts]]
+id = "demo-bank"
+name = "示例银行账户"
+kind = "bank"
+source = "manual"
+currency = "HKD"
+include_in_returns = false
+
+[sources.fake]
+start = "2025-01-01"
+monthly_deposit = 2000
+# fail_on = ["2025-03-03"]  # 模拟某天数据源故障

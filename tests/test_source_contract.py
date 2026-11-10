@@ -1,0 +1,80 @@
+"""契约测试：每个注册的数据源都必须通过。
+
+新增数据源时，在 CASES 里加一个构造函数（用录制的真实返回样本，不访问网络）。
+"""
+
+from __future__ import annotations
+
+import datetime as dt
+import json
+from collections.abc import Callable
+
+import pytest
+
+from portfolio_monitor.domain.instruments import is_canonical
+from portfolio_monitor.domain.models import Account, AssetClass, Instrument
+from portfolio_monitor.sources.base import Source, SourceContext, validate_snapshot
+from portfolio_monitor.sources.fake import FakeSource
+from portfolio_monitor.sources.manual import ManualSource
+from portfolio_monitor.sources.registry import REGISTRY
+from portfolio_monitor.storage.repository import Repository
+
+AS_OF = dt.date(2026, 3, 2)
+
+
+def _fake(repo: Repository) -> tuple[Source, list[Account]]:
+    accounts = [
+        Account(id="f-usd", name="F1", kind="broker", source="fake", currency="USD"),
+        Account(id="f-hkd", name="F2", kind="broker", source="fake", currency="HKD"),
+    ]
+    repo.sync_accounts(accounts)
+    return FakeSource(SourceContext(repo=repo, settings={"start": "2026-01-01"})), accounts
+
+
+def _manual(repo: Repository) -> tuple[Source, list[Account]]:
+    accounts = [
+        Account(id="m-cn", name="M1", kind="broker", source="manual", currency="CNY"),
+        Account(id="m-bank", name="M2", kind="bank", source="manual", currency="HKD",
+                include_in_returns=False),
+    ]
+    repo.sync_accounts(accounts)
+    repo.upsert_instruments([Instrument(id="CN:600036", name="X", asset_class=AssetClass.EQUITY,
+                                        currency="CNY")])
+    repo.set_manual_holding("m-cn", "CN:600036", 100, 40.0, "CNY", cost_basis=3800.0)
+    repo.set_manual_cash("m-cn", "CNY", 1000.0)
+    repo.set_manual_cash("m-bank", "HKD", 5000.0)
+    return ManualSource(SourceContext(repo=repo)), accounts
+
+
+CASES: dict[str, Callable[[Repository], tuple[Source, list[Account]]]] = {
+    "fake": _fake,
+    "manual": _manual,
+}
+
+
+def test_every_registered_source_has_a_contract_case():
+    assert set(REGISTRY) == set(CASES), "新数据源必须在契约测试里登记"
+
+
+@pytest.mark.parametrize("name", sorted(CASES))
+def test_contract(name, repo):
+    source, accounts = CASES[name](repo)
+    assert source.name == name
+    snap = source.fetch(AS_OF, accounts)
+
+    validate_snapshot(snap, name, AS_OF, accounts)
+    assert snap.positions or snap.cash, "至少返回持仓或现金之一"
+    assert all(is_canonical(i.id) for i in snap.instruments)
+    json.dumps(snap.raw)  # 原始返回必须能直接存档
+
+    # 同一天重复拉取结果一致（同步可安全重跑）
+    again = source.fetch(AS_OF, accounts)
+    assert again.model_dump(exclude={"raw"}) == snap.model_dump(exclude={"raw"})
+
+
+@pytest.mark.parametrize("name", sorted(CASES))
+def test_contract_empty_accounts(name, repo):
+    source, _ = CASES[name](repo)
+    snap = source.fetch(AS_OF, [])
+    validate_snapshot(snap, name, AS_OF, [])
+    assert not snap.positions and not snap.cash
