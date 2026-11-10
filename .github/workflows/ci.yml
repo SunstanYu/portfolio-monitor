@@ -1,0 +1,32 @@
+# 每次推送到 main、每个 PR：安装依赖 → 跑测试 → 用虚构数据跑一遍完整流程
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@v10
+        with:
+          enable-cache: true
+      - name: 安装依赖（Python 版本取自 .python-version，锁文件必须是最新的）
+        run: uv sync --locked
+      - name: 测试
+        run: uv run pytest -q
+      - name: 冒烟：虚构数据跑完整流程
+        run: uv run portfolio-monitor demo --days 30
