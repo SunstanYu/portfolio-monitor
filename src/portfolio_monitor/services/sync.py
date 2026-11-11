@@ -67,13 +67,19 @@ class SyncService:
         self.fx = fx
         self.raw_dir = raw_dir
 
-    def run(self, as_of: dt.date) -> SyncReport:
+    def run(self, as_of: dt.date, only: str | None = None, *, refetch_fx: bool = True) -> SyncReport:
+        """同步全部数据源。
+
+        only：只重跑这一个数据源（如手动账户被修改后），其他数据源的快照不动
+        refetch_fx=False：当天已有汇率的币种不再重新获取
+        """
         by_source: dict[str, list[Account]] = defaultdict(list)
         for account in self.repo.list_accounts(active_only=True):
-            by_source[account.source].append(account)
+            if only is None or account.source == only:
+                by_source[account.source].append(account)
 
         results = [self._run_source(name, accts, as_of) for name, accts in sorted(by_source.items())]
-        fx_status, fx_detail = self._ensure_fx(as_of)
+        fx_status, fx_detail = self._ensure_fx(as_of, only_missing=not refetch_fx)
         nav_total, nav_investable, stale, nav_detail = self._compute_nav(as_of)
         if nav_detail:
             fx_detail = "；".join(x for x in (fx_detail, nav_detail) if x)
@@ -146,8 +152,12 @@ class SyncService:
     def _needed_currencies(self, as_of: dt.date) -> set[str]:
         return {r["currency"] for r in self.repo.snapshot_rows(as_of)} - {"USD"}
 
-    def _ensure_fx(self, as_of: dt.date) -> tuple[str, str | None]:
+    def _ensure_fx(self, as_of: dt.date, only_missing: bool = False) -> tuple[str, str | None]:
         needed = self._needed_currencies(as_of)
+        if only_missing:
+            day = as_of.isoformat()
+            if all((self.repo.fx_on_or_before(as_of, c) or ("",))[0] == day for c in needed):
+                return ("ok" if needed else "not_needed"), None
         if not needed:
             return "not_needed", None
         try:

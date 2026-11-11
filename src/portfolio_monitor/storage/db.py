@@ -26,7 +26,9 @@ def connect(path: Path | str) -> sqlite3.Connection:
     if str(path) != ":memory:":
         Path(path).parent.mkdir(parents=True, exist_ok=True)
     # isolation_level=None：自动提交模式，事务由 transaction() 显式控制
-    conn = sqlite3.connect(str(path), isolation_level=None)
+    # check_same_thread=False：网页的路由都在同一个事件循环里串行执行，但这个循环未必跑在
+    # 建立连接的线程上（如测试客户端），所以关掉 sqlite3 的线程检查；不要在多个线程里并发使用
+    conn = sqlite3.connect(str(path), isolation_level=None, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
     if str(path) != ":memory:":

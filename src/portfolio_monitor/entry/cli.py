@@ -9,49 +9,18 @@ import sys
 import unicodedata
 from collections.abc import Sequence
 from pathlib import Path
-from zoneinfo import ZoneInfo
 
-from portfolio_monitor.app import App, open_app
+from portfolio_monitor.app import App, open_app, today_ny
 from portfolio_monitor.config import load_settings, parse_settings
 from portfolio_monitor.domain.models import AssetClass, Instrument
+from portfolio_monitor.entry.formatting import FIELD_LABELS, label, money, pct
 from portfolio_monitor.sources.fx import StaticFx
 
-NY = ZoneInfo("America/New_York")
 GROUP_FIELDS = ("instrument_id", "account_id", "asset_class", "currency", "region", "sector")
 _DEMO_MARKER = ".pm-demo"
 
 
-def today_ny() -> dt.date:
-    return dt.datetime.now(NY).date()
-
-
 # ---------- 输出格式 ----------
-
-ASSET_CLASS_LABELS = {
-    "equity": "股票", "etf": "ETF", "fund": "基金", "bond": "债券", "crypto": "加密货币",
-    "cash": "现金", "option": "期权", "other": "其他",
-}
-
-
-def money(v: float | None) -> str:
-    if v is None:
-        return "—"
-    return f"-${-v:,.0f}" if v < 0 else f"${v:,.0f}"
-
-
-def label(field: str, value: object) -> str:
-    if value is None:
-        return "—"
-    if field == "asset_class":
-        return ASSET_CLASS_LABELS.get(str(value), str(value))
-    return str(value)
-
-
-def pct(v: float | None, signed: bool = True) -> str:
-    if v is None:
-        return "—"
-    return f"{v:+.2%}" if signed else f"{v:.1%}"
-
 
 def _width(text: str) -> int:
     return sum(2 if unicodedata.east_asian_width(ch) in "WF" else 1 for ch in text)
@@ -137,8 +106,8 @@ def print_holdings(app: App, day: dt.date | None, by: str, account: str | None, 
         ))
     else:
         print(table(
-            [by, "市值", "占比", "浮盈"],
-            [[label(by, r[by]), money(r["market_value_usd"]), pct(r["weight"], signed=False),
+            [FIELD_LABELS.get(by, by), "市值", "占比", "浮盈"],
+            [[label(by, r[by], r), money(r["market_value_usd"]), pct(r["weight"], signed=False),
               money(r["unrealized_pnl_usd"])] for r in rows],
             right=(1, 2, 3),
         ))
@@ -162,6 +131,16 @@ def cmd_performance(app: App, args: argparse.Namespace) -> int:
           pct(p.index - 1), pct(p.drawdown)] for p in series],
         right=range(1, 6),
     ))
+    return 0
+
+
+def cmd_serve(app: App, args: argparse.Namespace) -> int:
+    import uvicorn
+
+    from portfolio_monitor.entry.web import create_app
+
+    print(f"网页：http://{args.host}:{args.port}  数据：{app.settings.data_dir}（Ctrl+C 停止）")
+    uvicorn.run(create_app(app), host=args.host, port=args.port, log_level="warning")
     return 0
 
 
@@ -245,6 +224,9 @@ def cmd_demo(_: App | None, args: argparse.Namespace) -> int:
         print(f"  运行 {len(days)} 天，失败 {len(failures)} 次（模拟故障，当天沿用上次快照）")
         for d, s in failures:
             print(f"  {d} {s.source}：{s.error}；沿用 {', '.join(s.carried_forward)}")
+        if args.serve:
+            print()
+            cmd_serve(app, args)
     finally:
         app.close()
     return 0
@@ -270,15 +252,24 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--limit", type=int, default=50)
     p = sub.add_parser("performance", help="收益率序列")
     p.add_argument("--last", type=int, default=20)
+    p = sub.add_parser("serve", help="启动网页（默认只监听本机）")
+    _server_args(p)
     p = sub.add_parser("demo", help="用虚构数据跑完整流程")
     p.add_argument("--days", type=int, default=180)
     p.add_argument("--data-dir", type=Path, default=Path("data/demo"))
+    p.add_argument("--serve", action="store_true", help="跑完后用演示数据启动网页")
+    _server_args(p)
     return parser
+
+
+def _server_args(p: argparse.ArgumentParser) -> None:
+    p.add_argument("--host", default="127.0.0.1", help="监听地址（默认 127.0.0.1，只允许本机访问）")
+    p.add_argument("--port", type=int, default=8000)
 
 
 COMMANDS = {
     "migrate": cmd_migrate, "sync": cmd_sync, "overview": cmd_overview,
-    "holdings": cmd_holdings, "performance": cmd_performance,
+    "holdings": cmd_holdings, "performance": cmd_performance, "serve": cmd_serve,
 }
 
 

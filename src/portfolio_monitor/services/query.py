@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import calendar
 import datetime as dt
 from collections.abc import Mapping, Sequence
 from typing import Any
@@ -14,6 +15,21 @@ from portfolio_monitor.domain.returns import Flow, NavPoint, PerfPoint, max_draw
 from portfolio_monitor.storage.repository import Repository
 
 _INSTRUMENT_FIELDS = ("name", "asset_class", "region", "sector", "currency")
+RANGES = {"1m": "近 1 月", "3m": "近 3 月", "ytd": "今年", "1y": "近 1 年", "all": "全部"}
+
+
+def range_start(end: dt.date, key: str) -> dt.date | None:
+    """区间起点（取起点当天或之前最近一个净值日为基准）；"all" 返回 None。"""
+    if key == "all":
+        return None
+    if key == "ytd":
+        return dt.date(end.year - 1, 12, 31)
+    months = {"1m": 1, "3m": 3, "1y": 12}.get(key)
+    if months is None:
+        raise ValueError(f"未知区间：{key}，可选 {list(RANGES)}")
+    y, m = divmod(end.month - 1 - months, 12)
+    year, month = end.year + y, m + 1
+    return dt.date(year, month, min(end.day, calendar.monthrange(year, month)[1]))
 
 
 class AllocationSlice(BaseModel):
@@ -40,6 +56,42 @@ class Overview(BaseModel):
     stale: bool
     unresolved_count: int
     sources: list[SourceStatus]
+
+
+class CurvePoint(BaseModel):
+    date: dt.date
+    nav: float
+    net_flow: float
+    cum_return: float  # 区间内累计 TWR
+    drawdown: float    # 相对区间内高点
+
+
+class Curve(BaseModel):
+    range: str
+    total_return: float | None
+    max_drawdown: float
+    points: list[CurvePoint]
+
+
+class MonthReturn(BaseModel):
+    month: str  # YYYY-MM
+    twr: float
+    nav_end: float
+    net_flow: float
+
+
+class AccountSummary(BaseModel):
+    id: str
+    name: str
+    institution: str | None
+    kind: str
+    source: str
+    currency: str
+    include_in_returns: bool
+    editable: bool  # 手动账户可在网页 / MCP 修改
+    value_usd: float
+    weight: float
+    stale: bool     # 今天的数据是沿用上次的
 
 
 class QueryService:
@@ -73,12 +125,15 @@ class QueryService:
         filters: Mapping[str, Any] | None = None,
     ) -> list[dict[str, Any]]:
         by_instrument = "instrument_id" in group_by
+        keep = _INSTRUMENT_FIELDS if by_instrument else ()
+        if "account_id" in group_by:
+            keep = (*keep, "account_name")
         return aggregate(
             self.valued_rows(as_of),
             group_by,
             filters=filters,
             sum_fields=(*DEFAULT_SUM_FIELDS, "quantity") if by_instrument else DEFAULT_SUM_FIELDS,
-            keep=_INSTRUMENT_FIELDS if by_instrument else (),
+            keep=keep,
         )
 
     def allocation(self, by: str = "asset_class", as_of: dt.date | None = None) -> list[AllocationSlice]:
@@ -101,6 +156,75 @@ class QueryService:
                 raise valuation.MissingFxRate([f.currency])
             flows.append(Flow(f.date, f.amount * rate[1]))
         return twr_series(navs, flows)
+
+    def curve(self, range_key: str = "all", end: dt.date | None = None) -> Curve:
+        """收益率与回撤曲线，以区间起点为 0 重新起算。"""
+        series = self.performance(end)
+        if not series:
+            return Curve(range=range_key, total_return=None, max_drawdown=0.0, points=[])
+        start = range_start(series[-1].date, range_key)
+        base_i = 0
+        if start is not None:
+            base_i = max((i for i, p in enumerate(series) if p.date <= start), default=0)
+        window = series[base_i:]
+        base, peak, points = window[0].index, 1.0, []
+        for i, p in enumerate(window):
+            cum = p.index / base
+            peak = max(peak, cum)
+            points.append(CurvePoint(date=p.date, nav=p.nav, net_flow=p.net_flow if i else 0.0,
+                                     cum_return=cum - 1, drawdown=cum / peak - 1))
+        return Curve(range=range_key, total_return=points[-1].cum_return,
+                     max_drawdown=min(p.drawdown for p in points), points=points)
+
+    def monthly_returns(self, end: dt.date | None = None) -> list[MonthReturn]:
+        """每月 TWR（首月从第一个净值日起算），新的在前。"""
+        series = self.performance(end)
+        months: dict[str, list[PerfPoint]] = {}
+        for p in series:
+            months.setdefault(p.date.strftime("%Y-%m"), []).append(p)
+        out, prev_index = [], series[0].index if series else 1.0
+        for month, points in months.items():
+            last = points[-1]
+            out.append(MonthReturn(month=month, twr=last.index / prev_index - 1, nav_end=last.nav,
+                                   net_flow=sum(p.net_flow for p in points)))
+            prev_index = last.index
+        return out[::-1]
+
+    def accounts(self, as_of: dt.date | None = None) -> list[AccountSummary]:
+        try:
+            rows = self.valued_rows(as_of)
+        except LookupError:
+            rows = []
+        total = sum(r["market_value_usd"] for r in rows)
+        out = []
+        for a in self.repo.list_accounts():
+            mine = [r for r in rows if r["account_id"] == a.id]
+            value = sum(r["market_value_usd"] for r in mine)
+            out.append(AccountSummary(
+                id=a.id, name=a.name, institution=a.institution, kind=a.kind.value, source=a.source,
+                currency=a.currency, include_in_returns=a.include_in_returns,
+                editable=a.source == "manual", value_usd=value,
+                weight=value / total if total else 0.0,
+                stale=any(r["carried_forward"] for r in mine),
+            ))
+        return sorted(out, key=lambda x: x.value_usd, reverse=True)
+
+    def account_rows(self, account_id: str, as_of: dt.date | None = None) -> list[dict[str, Any]]:
+        """某账户的持仓和现金（不合并），占比为账户内占比；持仓带每单位成本价。"""
+        try:
+            rows = aggregate(self.valued_rows(as_of), (), filters={"account_id": account_id})
+        except LookupError:
+            return []
+        for r in rows:
+            q, cost = r.get("quantity"), r.get("cost_basis")
+            r["cost_price"] = cost / q if r["row_type"] == "position" and cost is not None and q else None
+        return rows
+
+    def account_flows(self, account_id: str) -> list[dict[str, Any]]:
+        return self.repo.cash_flow_rows(account_id)
+
+    def sync_history(self, limit: int = 200) -> list[dict[str, Any]]:
+        return self.repo.sync_run_history(limit)
 
     def overview(self, as_of: dt.date | None = None) -> Overview:
         day = self._resolve(as_of)

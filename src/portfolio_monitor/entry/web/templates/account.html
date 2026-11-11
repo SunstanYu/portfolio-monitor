@@ -1,0 +1,147 @@
+{% extends "base.html" %}
+{% block title %}{{ a.name }} · 组合监测{% endblock %}
+{% block flash %}{% include "_flash.html" %}{% endblock %}
+{% block content %}
+<nav class="crumbs" aria-label="位置"><a href="/">总览</a> <span aria-hidden="true">/</span> {{ a.name }}</nav>
+
+<section class="card account-head">
+  <div>
+    <h1>{{ a.name }}</h1>
+    <p class="badges">
+      <span class="badge">{{ kind_label }}</span>
+      <span class="badge">{{ a.currency }}</span>
+      {% if a.editable %}<span class="badge badge-accent">手动账户 · 可编辑</span>
+      {% else %}<span class="badge">数据来自 {{ a.source }}</span>{% endif %}
+      <span class="badge">{{ '计入收益率' if a.include_in_returns else '不计入收益率' }}</span>
+      {% if a.stale %}<span class="badge badge-warn">⚠ 沿用上次快照</span>{% endif %}
+    </p>
+  </div>
+  <div class="account-value">
+    <div class="tile-label">市值</div>
+    <div class="tile-value">{{ a.value_usd|money }}</div>
+    <div class="tile-sub">占总资产 {{ a.weight|pct }}</div>
+  </div>
+</section>
+
+<section class="card">
+  <div class="card-head">
+    <h2>持仓与现金</h2>
+    {% if a.editable %}
+    <div class="toolbar">
+      <button type="button" class="btn" data-open="dlg-holding" data-mode="new">新增持仓</button>
+      <button type="button" class="btn" data-open="dlg-cash">改现金</button>
+      <button type="button" class="btn" data-open="dlg-flow">记入金 / 出金</button>
+    </div>
+    {% endif %}
+  </div>
+  {% if a.editable %}<p class="hint">修改立即反映到最新估值日（{{ effective }}）的快照和净值上，可在提示条或修改记录里撤销。</p>{% endif %}
+  <div class="table-wrap"><div id="positions-table" data-table="positions" data-account-id="{{ a.id }}"></div></div>
+</section>
+
+<section class="card">
+  <div class="card-head"><h2>资金进出</h2></div>
+  <div class="table-wrap"><div data-table="flows" data-account-id="{{ a.id }}"></div></div>
+</section>
+
+{% if a.editable %}
+<dialog id="dlg-holding" aria-labelledby="dlg-holding-title">
+  <form hx-post="/accounts/{{ a.id }}/edit" hx-target="find .form-msg" hx-swap="innerHTML">
+    <h2 id="dlg-holding-title" data-title-new="新增持仓" data-title-edit="修改持仓">新增持仓</h2>
+    <input type="hidden" name="kind" value="set_holding">
+    <div class="grid2">
+      <label>代码
+        <input name="symbol" required autocomplete="off" placeholder="600036、0700、NVDA">
+      </label>
+      <label>市场
+        <select name="market">
+          <option value="">自动识别</option>
+          {% for m in markets %}<option value="{{ m }}">{{ m }}</option>{% endfor %}
+        </select>
+      </label>
+      <label>名称 <span class="opt">可选</span>
+        <input name="name" autocomplete="off">
+      </label>
+      <label>类别
+        <select name="asset_class">
+          <option value="">默认（股票 / 沿用）</option>
+          {% for value, name in asset_classes %}<option value="{{ value }}">{{ name }}</option>{% endfor %}
+        </select>
+      </label>
+      <label>数量
+        <input name="quantity" required inputmode="decimal" autocomplete="off">
+      </label>
+      <label>价格 <span class="opt">原币</span>
+        <input name="price" required inputmode="decimal" autocomplete="off">
+      </label>
+      <label>成本价 <span class="opt">可选，不填沿用原成本价</span>
+        <input name="cost_price" inputmode="decimal" autocomplete="off">
+      </label>
+    </div>
+    <div class="form-msg" aria-live="polite"></div>
+    <div class="dialog-actions">
+      <button type="button" class="btn btn-ghost" data-close>取消</button>
+      <button type="submit" class="btn btn-primary">保存</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="dlg-cash" aria-labelledby="dlg-cash-title">
+  <form hx-post="/accounts/{{ a.id }}/edit" hx-target="find .form-msg" hx-swap="innerHTML">
+    <h2 id="dlg-cash-title">改现金余额</h2>
+    <input type="hidden" name="kind" value="set_cash">
+    <div class="grid2">
+      <label>币种
+        <input name="currency" required list="currency-list" value="{{ a.currency }}" autocomplete="off" maxlength="3">
+      </label>
+      <label>余额
+        <input name="amount" required inputmode="decimal" autocomplete="off">
+      </label>
+    </div>
+    <p class="hint">差额算作盈亏（如利息）。存钱取钱请用"记入金 / 出金"，否则会被算成收益。填 0 删除该币种。</p>
+    <div class="form-msg" aria-live="polite"></div>
+    <div class="dialog-actions">
+      <button type="button" class="btn btn-ghost" data-close>取消</button>
+      <button type="submit" class="btn btn-primary">保存</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="dlg-flow" aria-labelledby="dlg-flow-title">
+  <form hx-post="/accounts/{{ a.id }}/edit" hx-target="find .form-msg" hx-swap="innerHTML">
+    <h2 id="dlg-flow-title">记入金 / 出金</h2>
+    <input type="hidden" name="kind" value="record_flow">
+    <fieldset class="radios">
+      <legend>方向</legend>
+      <label><input type="radio" name="direction" value="in" checked> 入金</label>
+      <label><input type="radio" name="direction" value="out"> 出金</label>
+    </fieldset>
+    <div class="grid2">
+      <label>币种
+        <input name="currency" required list="currency-list" value="{{ a.currency }}" autocomplete="off" maxlength="3">
+      </label>
+      <label>金额
+        <input name="amount" required inputmode="decimal" autocomplete="off">
+      </label>
+      <label class="span2">备注 <span class="opt">可选</span>
+        <input name="note" autocomplete="off">
+      </label>
+    </div>
+    <label class="check">
+      <input type="checkbox" name="adjust_cash" checked data-toggle="flow-date">
+      同时调整现金余额（记在最新估值日 {{ effective }}）
+    </label>
+    <label id="flow-date" class="flow-date" hidden>日期 <span class="opt">只记流水、不改现金时可选</span>
+      <input type="date" name="date" max="{{ effective }}">
+    </label>
+    <p class="hint">入金出金在收益率（TWR）里会被剔除，不算赚亏。</p>
+    <div class="form-msg" aria-live="polite"></div>
+    <div class="dialog-actions">
+      <button type="button" class="btn btn-ghost" data-close>取消</button>
+      <button type="submit" class="btn btn-primary">保存</button>
+    </div>
+  </form>
+</dialog>
+
+<datalist id="currency-list">{% for c in currencies %}<option value="{{ c }}">{% endfor %}</datalist>
+{% endif %}
+{% endblock %}

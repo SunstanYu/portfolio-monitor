@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block content %}
+{% if o.stale or failed or o.unresolved_count %}
+<section class="alerts" aria-label="需要注意">
+  {% for s in failed %}
+  <p class="alert alert-bad"><span aria-hidden="true">✗</span> 数据源 {{ s.source }} 同步失败，今天沿用上次的快照：{{ s.error }}</p>
+  {% endfor %}
+  {% if o.stale and not failed %}
+  <p class="alert alert-warn"><span aria-hidden="true">⚠</span> 今天的数据含沿用的快照，详见<a href="/sync">同步状态</a></p>
+  {% endif %}
+  {% if o.unresolved_count %}
+  <p class="alert alert-warn"><span aria-hidden="true">⚠</span> {{ o.unresolved_count }} 个标的无法识别，已计入资产，待处理</p>
+  {% endif %}
+</section>
+{% endif %}
+
+<section class="tiles" aria-label="概览">
+  <div class="tile tile-hero">
+    <div class="tile-label">总资产</div>
+    <div class="tile-value">{{ o.nav_total_usd|money }}</div>
+    <div class="tile-sub">投资资产 {{ o.nav_investable_usd|money }} · 估值日 {{ o.as_of }}</div>
+  </div>
+  <div class="tile">
+    <div class="tile-label">今日</div>
+    <div class="tile-value {{ o.day_return|sign }}">{{ o.day_return|spct }}</div>
+  </div>
+  <div class="tile">
+    <div class="tile-label">今年</div>
+    <div class="tile-value {{ o.ytd_return|sign }}">{{ o.ytd_return|spct }}</div>
+  </div>
+  <div class="tile">
+    <div class="tile-label">累计（TWR）</div>
+    <div class="tile-value {{ o.since_inception_return|sign }}">{{ o.since_inception_return|spct }}</div>
+  </div>
+  <div class="tile">
+    <div class="tile-label">最大回撤</div>
+    <div class="tile-value {{ o.max_drawdown|sign }}">{{ o.max_drawdown|spct }}</div>
+  </div>
+</section>
+
+<section class="card">
+  <div class="card-head">
+    <h2>收益走势 <small>投资资产，剔除入金出金</small></h2>
+    <div class="seg" role="group" aria-label="区间" data-control="range">
+      {% for key, name in ranges.items() %}
+      <button type="button" data-value="{{ key }}" aria-pressed="{{ 'true' if key == 'all' else 'false' }}">{{ name }}</button>
+      {% endfor %}
+    </div>
+  </div>
+  <div id="curve-chart" class="chart chart-curve" role="img" aria-label="累计收益率与回撤曲线，数值见下方月度收益表"></div>
+</section>
+
+<section class="card">
+  <div class="card-head">
+    <h2>资产分配</h2>
+    <div class="seg" role="group" aria-label="分组" data-control="alloc">
+      <button type="button" data-value="asset_class" aria-pressed="true">类别</button>
+      <button type="button" data-value="account_id" aria-pressed="false">账户</button>
+      <button type="button" data-value="currency" aria-pressed="false">币种</button>
+      <button type="button" data-value="region" aria-pressed="false">地区</button>
+      <button type="button" data-value="instrument_id" aria-pressed="false">标的</button>
+    </div>
+  </div>
+  <div class="split">
+    <div id="alloc-chart" class="chart chart-bars" role="img" aria-label="资产分配条形图，数值见右侧表格"></div>
+    <div class="table-wrap"><div id="holdings-table" data-table="holdings" data-group-by="asset_class"></div></div>
+  </div>
+</section>
+
+<section class="card">
+  <div class="card-head"><h2>账户</h2></div>
+  <div class="table-wrap"><div data-table="accounts"></div></div>
+</section>
+
+<section class="card">
+  <div class="card-head"><h2>月度收益</h2></div>
+  <div class="table-wrap"><div data-table="monthly"></div></div>
+</section>
+{% endblock %}
+{% block scripts %}<script src="{{ static('vendor/echarts.min.js') }}"></script>{% endblock %}

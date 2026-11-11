@@ -178,7 +178,16 @@ class Rule(Protocol):
 | 修改日志 `/changes` | 所有修改，可撤销 |
 | 同步状态 `/sync` | 各数据源最近运行结果 |
 
-网页本身不做登录，由 Cloudflare Access 把关。
+网页本身不做登录，由 Cloudflare Access 把关。写入请求必须来自本站（检查 `Sec-Fetch-Site` / `Origin`），防止别的网站借登录状态提交修改。
+
+M3 已实现上表除以下几项外的全部内容：叠加基准（需要行情数据，M5 之后）、风险提示数（M6）、今日日报（M8）。资产分配用按大小排序的横向条形图（比饼图更容易比较相近的占比），与旁边的表格共用同一份数据。
+
+手动账户的修改（网页、JSON 接口、MCP 共用 `services/edit.py`）：
+
+- **生效日期**：立即反映到最新估值日的手动账户快照和净值上（手动账户没有盘中数据，最新估值日就代表当前状态）
+- **网页**一次点击生效，提示条里可撤销；**JSON 接口 / MCP** 分两步：`preview` 返回"改前 → 改后"，`confirm` 后才写入，待确认的修改 30 分钟后作废
+- **记资金进出 vs 直接改现金**：记资金进出会同时调整现金，并在 TWR 里当作入金 / 出金剔除，日期固定为最新估值日，保证净值和资金进出落在同一天；直接改现金的差额算作盈亏（如利息）
+- **撤销**：写回改前状态；同一项之后又被改过时拒绝，提示先撤销后面那次
 
 ### 7.1 表格与图表：新增一种表格 = 一份配置
 
@@ -206,18 +215,19 @@ positions 长表（标的 × 账户 × 日期，带维度属性）
 ```python
 HOLDINGS = TableSpec(
     id="holdings",
-    query="holdings",                                    # 对应的服务函数
-    group_by_options=["instrument", "account", "asset_class", "currency"],
-    columns=[
-        Col("name", "名称"),
-        Col("market_value_usd", "市值", fmt="money"),
-        Col("weight", "占比", fmt="pct"),
-        Col("unrealized_pnl", "浮盈", fmt="money", color="sign"),
-    ],
+    rows=_holdings,                                      # 调用服务层取数
+    group_by_options=("asset_class", "instrument_id", "account_id", "currency", "region"),
+    columns=(
+        Col("name", "名称", when=_is("instrument_id")),   # 只在按标的分组时显示
+        Col("group", "{group}", when=_is_not("instrument_id")),
+        Col("market_value_usd", "市值", "money"),
+        Col("weight", "占比", "pct"),
+        Col("unrealized_pnl_usd", "浮盈", "money", color="sign"),
+    ),
 )
 ```
 
-- 新增表格：写一份 `TableSpec`，在页面上放一个位置
+- 新增表格：写一份 `TableSpec` 并登记到 `TABLES`，在页面上放一个 `<div data-table="id">`；数据从 `/api/v1/tables/<id>` 取
 - 格式（金额、百分比、正负着色、币种）统一定义一次，所有表格共用
 - 临时查询不进项目：在 Telegram / Claude Code 里通过 MCP 问，或本机用 Datasette 打开 SQLite 文件
 
@@ -265,7 +275,7 @@ HOLDINGS = TableSpec(
 |---|---|---|
 | M1 | 项目骨架、设计文档；清理本机 Ghostfolio | ✅ |
 | M2 | 核心：数据库与迁移、标的编号规范化、`Source` 接口 + 手动账户 + 假数据源、每日快照、汇率、TWR、通用聚合 | ✅ |
-| M3 | 网页：仪表盘、表格组件（列定义驱动）、手动账户编辑、修改日志、JSON 接口 | |
+| M3 | 网页：仪表盘、表格组件（列定义驱动）、手动账户编辑、修改日志、JSON 接口 | ✅ |
 | M4 | MCP 端点，本机用 Claude Code 测试 | |
 | M5 | 数据源：IBKR（含一年回填）→ OKX → 盈立 | |
 | M6 | 风险规则 | |
@@ -295,3 +305,10 @@ HOLDINGS = TableSpec(
 | 分层，入口层只调服务层 | 新功能写一次，网页、JSON、MCP 同时可用；领域层纯计算，易测试 |
 | 最细粒度长表 + 派生表格 | 各种表格都是"筛选 + 分组 + 选列"，新增表格不改数据层 |
 | 表格由列定义驱动（Tabulator） | 新增表格只写配置；格式统一；无需前端构建 |
+| 网页修改一次点击生效 + 可撤销；JSON / MCP 两步确认 | 网页上表单本身就是确认，再弹一次确认只是多点一下；Telegram 里是自然语言，先看预览再确认更安全 |
+| 手动修改反映到最新估值日 | 改完立刻能在仪表盘看到；不必等下一次同步 |
+| 资金进出单独记录，日期固定为最新估值日 | 入金和现金变动落在同一天，TWR 才能准确剔除；直接改现金则视为盈亏 |
+| 撤销必须从后往前 | 同一项被改过多次时，撤销中间那次会覆盖后面的修改；拒绝并提示比静默覆盖安全 |
+| 资产分配用横向条形图，不用饼图 | 占比相近时饼图难以分辨大小；条形图同一基线、按大小排序，旁边的表格给出精确数字 |
+| 网页路由全部 async，共用一个 SQLite 连接 | 单用户，请求在事件循环里串行执行，不用处理并发和连接池 |
+| 前端库随项目分发（约 1.6 MB） | 不依赖 CDN；版本与校验值记在 `static/vendor/README.md` |

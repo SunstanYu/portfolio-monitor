@@ -1,0 +1,14 @@
+{# 修改后的提示条：已保存 / 已撤销，可再撤销 #}
+{% if flash %}
+{% set v = flash.view %}
+<div class="flash {{ 'flash-undone' if flash.undone else 'flash-saved' }}" role="status">
+  <span class="flash-text">
+    {% if flash.undone %}已撤销 #{{ v.id }}：{% else %}已保存 #{{ v.id }}：{% endif %}{{ v.summary }}
+  </span>
+  {% if not flash.undone and v.can_undo %}
+  <button type="button" class="btn btn-small"
+          hx-post="/changes/{{ v.id }}/undo" hx-vals='{"next": "{{ request.url.path }}"}'
+          hx-target="#flash" hx-swap="innerHTML">撤销</button>
+  {% endif %}
+</div>
+{% endif %}
