@@ -5,6 +5,8 @@ from __future__ import annotations
 import argparse
 import dataclasses
 import datetime as dt
+import os
+import secrets
 import sys
 import unicodedata
 from collections.abc import Sequence
@@ -134,13 +136,31 @@ def cmd_performance(app: App, args: argparse.Namespace) -> int:
     return 0
 
 
-def cmd_serve(app: App, args: argparse.Namespace) -> int:
+def cmd_serve(app: App, args: argparse.Namespace, *, demo: bool = False) -> int:
     import uvicorn
 
     from portfolio_monitor.entry.web import create_app
 
+    token = os.environ.get("MCP_TOKEN") or None
+    if token is None and demo:
+        token = secrets.token_hex(32)
+    try:
+        web = create_app(app, mcp_token=token)
+    except ValueError as e:
+        print(f"⚠ {e}", file=sys.stderr)
+        return 2
+
     print(f"网页：http://{args.host}:{args.port}  数据：{app.settings.data_dir}（Ctrl+C 停止）")
-    uvicorn.run(create_app(app), host=args.host, port=args.port, log_level="warning")
+    mcp_url = f"http://127.0.0.1:{args.port}/mcp"
+    if token is None:
+        print("MCP：未开启，设置环境变量 MCP_TOKEN 后重启（见 .env.example）")
+    elif demo and not os.environ.get("MCP_TOKEN"):
+        print(f"MCP：{mcp_url}（只接受本机访问；token 为本次演示临时生成，重启后失效）")
+        print(f'  接入 Claude Code：claude mcp add --transport http portfolio-demo {mcp_url} '
+              f'--header "Authorization: Bearer {token}"')
+    else:
+        print(f"MCP：{mcp_url}（只接受本机访问，Authorization: Bearer $MCP_TOKEN）")
+    uvicorn.run(web, host=args.host, port=args.port, log_level="warning")
     return 0
 
 
@@ -226,7 +246,7 @@ def cmd_demo(_: App | None, args: argparse.Namespace) -> int:
             print(f"  {d} {s.source}：{s.error}；沿用 {', '.join(s.carried_forward)}")
         if args.serve:
             print()
-            cmd_serve(app, args)
+            return cmd_serve(app, args, demo=True)
     finally:
         app.close()
     return 0
@@ -252,12 +272,12 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--limit", type=int, default=50)
     p = sub.add_parser("performance", help="收益率序列")
     p.add_argument("--last", type=int, default=20)
-    p = sub.add_parser("serve", help="启动网页（默认只监听本机）")
+    p = sub.add_parser("serve", help="启动网页和 MCP（默认只监听本机；设置 MCP_TOKEN 后开放 /mcp）")
     _server_args(p)
     p = sub.add_parser("demo", help="用虚构数据跑完整流程")
     p.add_argument("--days", type=int, default=180)
     p.add_argument("--data-dir", type=Path, default=Path("data/demo"))
-    p.add_argument("--serve", action="store_true", help="跑完后用演示数据启动网页")
+    p.add_argument("--serve", action="store_true", help="跑完后用演示数据启动网页和 MCP")
     _server_args(p)
     return parser
 

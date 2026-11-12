@@ -11,7 +11,7 @@ uv sync
 uv run portfolio-monitor demo --days 180 --serve
 ```
 
-用假数据源 + 手动账户跑完整流程（快照 → 汇率 → 净值 → TWR → 聚合），数据写在 `data/demo/`；加 `--serve` 后打开 http://127.0.0.1:8000 看网页，手动账户（示例 A 股、示例银行）可以直接在网页上修改。
+用假数据源 + 手动账户跑完整流程（快照 → 汇率 → 净值 → TWR → 聚合），数据写在 `data/demo/`；加 `--serve` 后打开 http://127.0.0.1:8000 看网页，手动账户（示例 A 股、示例银行）可以直接在网页上修改。MCP 也会开启：没设 `MCP_TOKEN` 时临时生成一个，终端里会打印接入 Claude Code 的命令。
 
 ## 命令
 
@@ -21,8 +21,10 @@ uv run portfolio-monitor overview [--date ...]          # 概览：总资产、�
 uv run portfolio-monitor holdings --by asset_class      # 持仓：instrument_id / account_id / asset_class / currency / region / sector
 uv run portfolio-monitor performance --last 20          # TWR 收益率序列
 uv run portfolio-monitor migrate                        # 初始化 / 升级数据库
-uv run portfolio-monitor serve [--host 127.0.0.1 --port 8000]   # 启动网页（默认只监听本机）
+uv run portfolio-monitor serve [--host 127.0.0.1 --port 8000]   # 启动网页和 MCP（默认只监听本机）
 ```
+
+`serve` 从环境变量读 `MCP_TOKEN`，本机可以用 uv 直接加载 `.env`：`uv run --env-file .env portfolio-monitor serve`。
 
 ## 网页
 
@@ -34,6 +36,16 @@ uv run portfolio-monitor serve [--host 127.0.0.1 --port 8000]   # 启动网页�
 | `/sync` | 各数据源每次同步的结果 |
 
 JSON 接口在 `/api/v1/...`（概览、持仓、曲线、月度收益、表格、修改记录）；写入分两步：`POST /api/v1/changes/preview` 返回改前 → 改后，`POST /api/v1/changes/<id>/confirm` 后才生效。
+
+## MCP
+
+`/mcp`（Streamable HTTP），设置了 `MCP_TOKEN` 才开放，只接受本机访问。工具列表见 [DESIGN.md §8](DESIGN.md#8-mcp-工具)；写入同样两步：写入类工具返回预览和 `change_id`，`confirm_change` 后才生效。
+
+接入 Claude Code（token 用 `openssl rand -hex 32` 生成，写进 `.env`）：
+
+```bash
+claude mcp add --transport http portfolio http://127.0.0.1:8000/mcp --header "Authorization: Bearer $MCP_TOKEN"
+```
 
 ## 配置与凭据
 
