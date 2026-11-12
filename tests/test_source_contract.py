@@ -1,6 +1,7 @@
 """契约测试：每个注册的数据源都必须通过。
 
-新增数据源时，在 CASES 里加一个构造函数（用录制的真实返回样本，不访问网络）。
+新增数据源时，在 CASES 里加一个构造函数（用与真实返回结构一致的虚构样本，不访问网络；
+仓库是公开的，不要放真实报表）。
 """
 
 from __future__ import annotations
@@ -10,11 +11,13 @@ import json
 from collections.abc import Callable
 
 import pytest
+from flex_mock import FlexMock
 
 from portfolio_monitor.domain.instruments import is_canonical
 from portfolio_monitor.domain.models import Account, AssetClass, Instrument
 from portfolio_monitor.sources.base import Source, SourceContext, validate_snapshot
 from portfolio_monitor.sources.fake import FakeSource
+from portfolio_monitor.sources.ibkr import IbkrSource
 from portfolio_monitor.sources.manual import ManualSource
 from portfolio_monitor.sources.registry import REGISTRY
 from portfolio_monitor.storage.repository import Repository
@@ -46,9 +49,16 @@ def _manual(repo: Repository) -> tuple[Source, list[Account]]:
     return ManualSource(SourceContext(repo=repo)), accounts
 
 
+def _ibkr(repo: Repository) -> tuple[Source, list[Account]]:
+    accounts = [Account(id="i-main", name="I1", kind="broker", source="ibkr", currency="USD")]
+    repo.sync_accounts(accounts)
+    return IbkrSource(SourceContext(repo=repo), client=FlexMock(AS_OF).client()), accounts
+
+
 CASES: dict[str, Callable[[Repository], tuple[Source, list[Account]]]] = {
     "fake": _fake,
     "manual": _manual,
+    "ibkr": _ibkr,
 }
 
 

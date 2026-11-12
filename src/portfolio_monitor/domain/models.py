@@ -104,11 +104,25 @@ class UnresolvedSymbol(_Model):
     sample: dict[str, Any] = Field(default_factory=dict)
 
 
+class AccountValue(_Model):
+    """账户在某日的总值（只有总数、没有明细），用于回填历史净值。"""
+
+    date: dt.date
+    account_id: str
+    currency: Currency
+    value: Finite
+
+
 class SourceSnapshot(_Model):
-    """一个数据源在某个估值日返回的全部内容。"""
+    """一个数据源在某个估值日返回的全部内容。
+
+    data_date：数据实际所属日期。数据源有延迟（如 IBKR 当天的报表次日才有）时早于 as_of，
+    同步时据此判断是否标记为沿用；None 表示就是 as_of。
+    """
 
     source: str
     as_of: dt.date
+    data_date: dt.date | None = None
     positions: list[Position] = Field(default_factory=list)
     cash: list[CashBalance] = Field(default_factory=list)
     flows: list[CashFlow] = Field(default_factory=list)
@@ -123,3 +137,14 @@ class SourceSnapshot(_Model):
         if missing:
             raise ValueError(f"持仓引用了未提供资料的标的：{missing}")
         return self
+
+
+class SourceHistory(_Model):
+    """数据源能提供的历史：每日账户总值 + 资金进出（如 IBKR 一年回填）。"""
+
+    source: str
+    start: dt.date
+    end: dt.date
+    values: list[AccountValue] = Field(default_factory=list)
+    flows: list[CashFlow] = Field(default_factory=list)
+    raw: Any = None

@@ -17,7 +17,7 @@ from pathlib import Path
 
 from portfolio_monitor.domain import valuation
 from portfolio_monitor.domain.models import Account
-from portfolio_monitor.sources.base import Source, validate_snapshot
+from portfolio_monitor.sources.base import HistorySource, Source, validate_history, validate_snapshot
 from portfolio_monitor.sources.fx import FxProvider
 from portfolio_monitor.storage.db import transaction
 from portfolio_monitor.storage.repository import Repository
@@ -33,6 +33,31 @@ class SourceResult:
     new_flows: int = 0
     unresolved: int = 0
     carried_forward: list[str] = field(default_factory=list)
+    note: str | None = None
+
+
+@dataclass
+class BackfillReport:
+    source: str
+    start: dt.date
+    end: dt.date  # 实际截止日（数据源可能还没有最近几天的数据）
+    values: int
+    new_flows: int
+    nav_days: int
+    fx_problems: list[str]
+    raw_path: str | None
+
+
+def lagging(data_date: dt.date | None, as_of: dt.date) -> bool:
+    """数据日期和估值日之间隔着工作日 → 数据落后（周末拿到周五的数据不算）。"""
+    if data_date is None or data_date >= as_of:
+        return False
+    day = data_date + dt.timedelta(days=1)
+    while day <= as_of:
+        if day.weekday() < 5:
+            return True
+        day += dt.timedelta(days=1)
+    return False
 
 
 @dataclass
@@ -103,11 +128,13 @@ class SyncService:
                 raise KeyError(f"未注册的数据源：{name}")
             snap = source.fetch(as_of, accounts)
             validate_snapshot(snap, name, as_of, accounts)
-            raw_path = self._archive(as_of, name, snap.raw)
+            behind = lagging(snap.data_date, as_of)
+            raw_path = self._archive(self.raw_dir / as_of.isoformat(), name, snap.raw)
             with transaction(self.repo.conn):
                 self.repo.upsert_instruments(snap.instruments)
                 self.repo.replace_snapshot(
-                    as_of, [a.id for a in accounts], snap.positions, snap.cash, run_id
+                    as_of, [a.id for a in accounts], snap.positions, snap.cash, run_id,
+                    carried_forward=behind,
                 )
                 new_flows = self.repo.insert_cash_flows(snap.flows, origin="api")
                 self.repo.record_unresolved(name, snap.unresolved, as_of)
@@ -118,6 +145,7 @@ class SyncService:
             return SourceResult(
                 name, "ok", positions=len(snap.positions), cash=len(snap.cash),
                 new_flows=new_flows, unresolved=len(snap.unresolved),
+                note=f"数据截至 {snap.data_date}，按沿用标记" if behind else None,
             )
         except Exception as e:  # 隔离单个数据源的任何失败
             error = f"{type(e).__name__}: {e}"
@@ -138,22 +166,69 @@ class SyncService:
             carried.append(account.id)
         return carried
 
-    def _archive(self, as_of: dt.date, name: str, raw: object) -> str | None:
+    def _archive(self, folder: Path, name: str, raw: object) -> str | None:
+        """原始返回存档：XML 文本存 .xml，其余存 .json。"""
         if raw is None:
             return None
-        folder = self.raw_dir / as_of.isoformat()
         folder.mkdir(parents=True, exist_ok=True)
-        path = folder / f"{name}.json"
-        path.write_text(json.dumps(raw, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
+        if isinstance(raw, str) and raw.lstrip().startswith("<"):
+            path = folder / f"{name}.xml"
+            path.write_text(raw, encoding="utf-8")
+        else:
+            path = folder / f"{name}.json"
+            path.write_text(json.dumps(raw, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
         return str(path)
+
+    # ---------- 历史回填 ----------
+
+    def backfill(self, name: str, start: dt.date, end: dt.date) -> BackfillReport:
+        """用数据源的历史（每日账户总值 + 资金进出）回填净值。
+
+        有快照的日子以快照为准，历史总值只补没有快照的日子；可重复运行（覆盖同一天的总值，流水去重）。
+        """
+        accounts = [a for a in self.repo.list_accounts(active_only=True) if a.source == name]
+        if not accounts:
+            raise LookupError(f"没有使用数据源 {name} 的账户")
+        source = self.sources.get(name)
+        if not isinstance(source, HistorySource):
+            raise ValueError(f"数据源 {name} 不支持回填历史")
+
+        hist = source.history(start, end, accounts)
+        validate_history(hist, name, accounts)
+        raw_path = self._archive(self.raw_dir / "backfill" / f"{hist.start}_{hist.end}", name, hist.raw)
+        with transaction(self.repo.conn):
+            n_values = self.repo.upsert_account_history(hist.values, origin=f"{name}:backfill")
+            new_flows = self.repo.insert_cash_flows(hist.flows, origin="api")
+
+        problems: list[str] = []
+        # 资金进出按流水当天的汇率换算，先把这些日子的汇率补齐
+        flow_ccys: dict[dt.date, set[str]] = defaultdict(set)
+        for f in hist.flows:
+            if f.currency != "USD":
+                flow_ccys[f.date].add(f.currency)
+        for day, ccys in sorted(flow_ccys.items()):
+            status, detail = self._ensure_fx(day, only_missing=True, needed=ccys)
+            if status not in ("ok", "not_needed") and detail:
+                problems.append(f"{day} {detail}")
+
+        nav_days = 0
+        for day in sorted({v.date for v in hist.values}):
+            status, detail = self._ensure_fx(day, only_missing=True)
+            if status not in ("ok", "not_needed") and detail:
+                problems.append(f"{day} {detail}")
+            total, _, _, _ = self._compute_nav(day)
+            nav_days += total is not None
+        return BackfillReport(name, hist.start, hist.end, n_values, new_flows, nav_days, problems, raw_path)
 
     # ---------- 汇率与净值 ----------
 
     def _needed_currencies(self, as_of: dt.date) -> set[str]:
         return {r["currency"] for r in self.repo.snapshot_rows(as_of)} - {"USD"}
 
-    def _ensure_fx(self, as_of: dt.date, only_missing: bool = False) -> tuple[str, str | None]:
-        needed = self._needed_currencies(as_of)
+    def _ensure_fx(
+        self, as_of: dt.date, only_missing: bool = False, needed: set[str] | None = None
+    ) -> tuple[str, str | None]:
+        needed = self._needed_currencies(as_of) if needed is None else needed - {"USD"}
         if only_missing:
             day = as_of.isoformat()
             if all((self.repo.fx_on_or_before(as_of, c) or ("",))[0] == day for c in needed):

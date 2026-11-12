@@ -16,6 +16,7 @@ from portfolio_monitor.app import App, open_app, today_ny
 from portfolio_monitor.config import load_settings, parse_settings
 from portfolio_monitor.domain.models import AssetClass, Instrument
 from portfolio_monitor.entry.formatting import FIELD_LABELS, label, money, pct
+from portfolio_monitor.sources.base import SourceError
 from portfolio_monitor.sources.fx import StaticFx
 
 GROUP_FIELDS = ("instrument_id", "account_id", "asset_class", "currency", "region", "sector")
@@ -57,11 +58,11 @@ def cmd_migrate(app: App, _: argparse.Namespace) -> int:
 
 def cmd_sync(app: App, args: argparse.Namespace) -> int:
     day = args.date or today_ny()
-    report = app.sync.run(day)
-    print(f"估值日 {day}")
+    report = app.sync.run(day, only=args.source)
+    print(f"估值日 {day}" + (f"（只同步 {args.source}）" if args.source else ""))
     rows = []
     for s in report.sources:
-        note = s.error or ""
+        note = s.error or s.note or ""
         if s.carried_forward:
             note += f"（沿用上次快照：{', '.join(s.carried_forward)}）"
         rows.append([s.source, "✅" if s.status == "ok" else "❌", str(s.positions), str(s.cash),
@@ -71,6 +72,25 @@ def cmd_sync(app: App, args: argparse.Namespace) -> int:
     print(f"总资产 {money(report.nav_total)}  投资资产 {money(report.nav_investable)}"
           + ("  ⚠ 含沿用数据" if report.stale else ""))
     return 0 if report.ok else 1
+
+
+def cmd_backfill(app: App, args: argparse.Namespace) -> int:
+    end = args.end or today_ny()
+    start = end - dt.timedelta(days=args.days - 1)
+    try:
+        r = app.sync.backfill(args.source, start, end)
+    except (ValueError, SourceError) as e:
+        print(f"⚠ {e}", file=sys.stderr)
+        return 1
+    print(f"{r.source} 回填 {r.start} → {r.end}（请求截止 {end}）")
+    print(f"每日总值 {r.values} 天，新增资金进出 {r.new_flows} 条，重算净值 {r.nav_days} 天")
+    if r.raw_path:
+        print(f"原始报表：{r.raw_path}")
+    for problem in r.fx_problems[:10]:
+        print(f"⚠ {problem}")
+    if len(r.fx_problems) > 10:
+        print(f"⚠ 另有 {len(r.fx_problems) - 10} 条汇率问题")
+    return 0 if not r.fx_problems else 1
 
 
 def print_overview(app: App, day: dt.date | None) -> None:
@@ -263,6 +283,11 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("migrate", help="初始化 / 升级数据库")
     p = sub.add_parser("sync", help="运行一次每日同步")
     p.add_argument("--date", **date_arg)
+    p.add_argument("--source", help="只同步这一个数据源（如次日早上给 IBKR 补跑前一估值日）")
+    p = sub.add_parser("backfill", help="用数据源的历史回填净值和资金进出（如 IBKR 最多一年）")
+    p.add_argument("source", help="数据源名称，如 ibkr")
+    p.add_argument("--days", type=int, default=365, help="回填天数（默认 365）")
+    p.add_argument("--end", type=dt.date.fromisoformat, help="截止日 YYYY-MM-DD（默认今天，没有数据时自动往前退）")
     p = sub.add_parser("overview", help="组合概览")
     p.add_argument("--date", **date_arg)
     p = sub.add_parser("holdings", help="持仓（可按维度汇总）")
@@ -288,7 +313,7 @@ def _server_args(p: argparse.ArgumentParser) -> None:
 
 
 COMMANDS = {
-    "migrate": cmd_migrate, "sync": cmd_sync, "overview": cmd_overview,
+    "migrate": cmd_migrate, "sync": cmd_sync, "backfill": cmd_backfill, "overview": cmd_overview,
     "holdings": cmd_holdings, "performance": cmd_performance, "serve": cmd_serve,
 }
 

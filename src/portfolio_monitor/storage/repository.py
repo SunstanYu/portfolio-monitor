@@ -10,6 +10,7 @@ from typing import Any
 
 from portfolio_monitor.domain.models import (
     Account,
+    AccountValue,
     CashBalance,
     CashFlow,
     Instrument,
@@ -208,7 +209,11 @@ class Repository:
         return prev, positions, cash
 
     def snapshot_rows(self, as_of: date) -> list[dict[str, Any]]:
-        """该日全部持仓 + 现金，已关联账户和标的属性；现金行的 instrument_id 为 CASH:<币种>。"""
+        """该日全部持仓 + 现金，已关联账户和标的属性；现金行的 instrument_id 为 CASH:<币种>。
+
+        当天没有快照、只有历史总值（account_history）的账户，以一行 row_type='summary'、
+        instrument_id 为 ACCOUNT:<账户> 的总值代替。
+        """
         day = _d(as_of)
         rows = self.conn.execute(
             "SELECT 'position' AS row_type, p.account_id, a.name AS account_name,"
@@ -221,16 +226,49 @@ class Repository:
             " SELECT 'cash', c.account_id, a.name, a.kind, a.include_in_returns,"
             " 'CASH:' || c.currency, c.currency || ' 现金', 'cash', NULL, NULL, c.currency,"
             " c.amount, 1.0, c.amount, c.amount, c.carried_forward"
-            " FROM cash_balances c JOIN accounts a ON a.id=c.account_id WHERE c.as_of=?",
-            (day, day),
+            " FROM cash_balances c JOIN accounts a ON a.id=c.account_id WHERE c.as_of=?"
+            " UNION ALL"
+            " SELECT 'summary', h.account_id, a.name, a.kind, a.include_in_returns,"
+            " 'ACCOUNT:' || h.account_id, a.name || ' 总值', 'other', NULL, NULL, h.currency,"
+            " NULL, NULL, h.value, NULL, 0"
+            " FROM account_history h JOIN accounts a ON a.id=h.account_id WHERE h.as_of=?"
+            " AND NOT EXISTS (SELECT 1 FROM positions p WHERE p.as_of=h.as_of AND p.account_id=h.account_id)"
+            " AND NOT EXISTS (SELECT 1 FROM cash_balances c WHERE c.as_of=h.as_of AND c.account_id=h.account_id)",
+            (day, day, day),
         )
         return [dict(r) for r in rows]
 
     def snapshot_dates(self) -> list[str]:
         rows = self.conn.execute(
-            "SELECT as_of FROM positions UNION SELECT as_of FROM cash_balances ORDER BY as_of"
+            "SELECT as_of FROM positions UNION SELECT as_of FROM cash_balances"
+            " UNION SELECT as_of FROM account_history ORDER BY as_of"
         )
         return [r[0] for r in rows]
+
+    def first_value_date(self, account_id: str) -> str | None:
+        """该账户最早有估值（快照或历史总值）的日期。"""
+        row = self.conn.execute(
+            "SELECT MIN(as_of) FROM ("
+            " SELECT as_of FROM positions WHERE account_id=?"
+            " UNION SELECT as_of FROM cash_balances WHERE account_id=?"
+            " UNION SELECT as_of FROM account_history WHERE account_id=?)",
+            (account_id, account_id, account_id),
+        ).fetchone()
+        return row[0]
+
+    def upsert_account_history(self, values: Iterable[AccountValue], origin: str) -> int:
+        """写入账户历史总值（同一天同一账户以最后一次为准），返回写入条数。"""
+        now = utc_now()
+        rows = [(_d(v.date), v.account_id, v.currency, v.value, origin, now) for v in values]
+        with transaction(self.conn):
+            self.conn.executemany(
+                "INSERT INTO account_history (as_of, account_id, currency, value, origin, updated_at)"
+                " VALUES (?,?,?,?,?,?) ON CONFLICT(as_of, account_id) DO UPDATE SET"
+                " currency=excluded.currency, value=excluded.value, origin=excluded.origin,"
+                " updated_at=excluded.updated_at",
+                rows,
+            )
+        return len(rows)
 
     def latest_as_of(self) -> str | None:
         row = self.conn.execute("SELECT MAX(as_of) FROM daily_nav").fetchone()

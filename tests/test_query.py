@@ -88,3 +88,34 @@ def test_account_rows_have_in_account_weights_and_cost_price(app):
 def test_holdings_grouped_by_account_keeps_names(app):
     rows = app.query.holdings(group_by=["account_id"])
     assert {r["account_name"] for r in rows} == {"美股", "港股", "银行"}
+
+
+def test_late_joining_account_counts_as_transfer_in(make_test_app):
+    """IBKR 回填了历史、其他账户后来才有数据：加入当天的市值算转入，不算收益。"""
+    from portfolio_monitor.domain.models import AccountValue, CashBalance, CashFlow
+
+    app = make_test_app({"accounts": [
+        {"id": "ib", "name": "IB", "kind": "broker", "source": "manual", "currency": "USD"},
+        {"id": "cn", "name": "CN", "kind": "broker", "source": "manual", "currency": "USD"},
+    ]})
+    d1, d2, d3 = dt.date(2026, 3, 2), dt.date(2026, 3, 3), dt.date(2026, 3, 4)
+    repo = app.repo
+    repo.upsert_account_history([AccountValue(date=d1, account_id="ib", currency="USD", value=100),
+                                 AccountValue(date=d2, account_id="ib", currency="USD", value=110)],
+                                origin="test")
+    repo.replace_snapshot(d3, ["ib", "cn"], [], [
+        CashBalance(account_id="ib", currency="USD", amount=131),
+        CashBalance(account_id="cn", currency="USD", amount=50)], None)
+    repo.insert_cash_flows([
+        CashFlow(date=d3, account_id="ib", currency="USD", amount=10, external_id="ib-1"),
+        CashFlow(date=d3, account_id="cn", currency="USD", amount=50, external_id="cn-1"),  # 已含在加入市值里
+        CashFlow(date=d1, account_id="cn", currency="USD", amount=999, external_id="cn-0"),  # 加入前，不计
+    ], origin="manual")
+    assert app.sync.recompute_nav() == 3
+
+    series = app.query.performance()
+    assert [p.nav for p in series] == [100, 110, 181]
+    assert series[1].daily_return == pytest.approx(0.10)
+    # (181 − 加入的 50 − 入金 10) / 110 − 1
+    assert series[2].net_flow == pytest.approx(60) and series[2].daily_return == pytest.approx(0.10)
+    assert series[2].index == pytest.approx(1.21)
