@@ -39,8 +39,7 @@
 | `fx_rates` | 每日汇率（USD 基准） |
 | `daily_nav` | 每日组合净值、净入金、日收益、TWR 指数 |
 | `sync_runs` | 每次同步：数据源、状态、耗时、错误、原始返回存档路径 |
-| `change_log` | 所有修改：时间、来源（web / mcp / sync）、改前、改后、是否已撤销 |
-| `pending_changes` | MCP 两步写入的待确认改动（10 分钟过期） |
+| `change_log` | 手动账户的所有修改：时间、来源（web / api / mcp / cli）、改前、改后、状态（待确认 / 已生效 / 已撤销 / 已放弃）；JSON 接口和 MCP 的待确认修改也存在这里，30 分钟后作废 |
 | `daily_reports` | Hermes 写好的日报正文（网页同步展示） |
 
 - 存储：SQLite 单文件 `data/portfolio.sqlite`
@@ -233,16 +232,25 @@ HOLDINGS = TableSpec(
 
 ## 8. MCP 工具
 
+`/mcp`（Streamable HTTP），与网页同一进程，代码在 `entry/mcp/`。
+
 | 读取 | 写入（仅手动账户，两步确认） |
 |---|---|
-| `get_overview`：总资产、收益、资产分配 | `set_cash_balance`：改现金余额 |
-| `get_holdings`：合并持仓，可按账户筛选 | `set_holding` / `remove_holding`：改持仓 |
-| `get_performance`：收益率曲线、回撤 | `record_cash_flow`：记录入金 / 出金 |
-| `get_risk_alerts`：触发的规则 | `confirm_change`：确认并执行待定改动 |
-| `get_daily_summary`：日报所需的结构化数据 | `undo_change`：撤销某次修改 |
-| `get_change_log`：修改记录 | `save_daily_report`：保存 Hermes 写好的日报 |
+| `get_overview`：总资产、收益、回撤、资产分配、数据源状态 | `set_holding` / `remove_holding`：改持仓（预览） |
+| `get_accounts`：账户列表，含 id、是否可修改 | `set_cash_balance`：改现金余额（预览） |
+| `get_account`：某账户的持仓明细（含成本价）和资金进出 | `record_cash_flow`：记录入金 / 出金（预览） |
+| `get_holdings`：合并持仓，可分组、按账户筛选 | `confirm_change`：确认并执行待确认的修改 |
+| `get_performance`：区间收益、最大回撤、月度收益；逐日数据按需返回 | `discard_change`：放弃待确认的修改 |
+| `get_change_log`：修改记录 | `undo_change`：撤销一次已生效的修改 |
+| `get_risk_alerts`：触发的规则（M6） | `save_daily_report`：保存 Hermes 写好的日报（M8） |
+| `get_daily_summary`：日报所需的结构化数据（M8） | |
 
-两步写入：写入类工具只返回"改前 → 改后"预览和 `change_id`；调用 `confirm_change(change_id)` 后才落库。所有修改记入 `change_log`。
+- **两步写入**：写入类工具只返回"改前 → 改后"预览和 `change_id`（来源记为 mcp）；调用 `confirm_change(change_id)` 后才落库。撤销与网页一致，一步完成；服务端的说明（instructions）要求模型确认和撤销前都先征得用户同意
+- **鉴权**：`Authorization: Bearer <MCP_TOKEN>`，至少 32 个字符；未设置时不开放 `/mcp`。不用 SDK 的 OAuth 资源服务器，那套需要另有授权服务器，单用户静态 token 用不上
+- **只接受本机**：沿用 SDK 默认的 Host 白名单（127.0.0.1 / localhost / [::1]）。即使隧道漏配了 `/mcp` 的拦截规则，经隧道进来的请求 Host 是外部域名，也会被拒绝（421）
+- **工具都是 async**：SDK 会把同步工具放进线程池执行，和网页共用的 SQLite 连接会被并发访问；async 工具和网页路由一样在事件循环里串行执行
+- **错误**：业务错误（只能修改手动账户、参数不合法、撤销被挡住等）转成工具错误，模型能读到中文原因并重试；参数校验沿用 `services/edit.py`，不重复定义
+- 每个工具标注只读 / 会修改（MCP tool annotations），客户端据此决定是否先问用户；这只是提示，安全边界在两步确认和手动账户限制
 
 ## 9. 部署（AWS + Cloudflare）
 
@@ -276,7 +284,7 @@ HOLDINGS = TableSpec(
 | M1 | 项目骨架、设计文档；清理本机 Ghostfolio | ✅ |
 | M2 | 核心：数据库与迁移、标的编号规范化、`Source` 接口 + 手动账户 + 假数据源、每日快照、汇率、TWR、通用聚合 | ✅ |
 | M3 | 网页：仪表盘、表格组件（列定义驱动）、手动账户编辑、修改日志、JSON 接口 | ✅ |
-| M4 | MCP 端点，本机用 Claude Code 测试 | |
+| M4 | MCP 端点，本机用 Claude Code 测试 | ✅ |
 | M5 | 数据源：IBKR（含一年回填）→ OKX → 盈立 | |
 | M6 | 风险规则 | |
 | M7 | 部署 AWS + Cloudflare Tunnel / Access + 备份 | |
@@ -312,3 +320,6 @@ HOLDINGS = TableSpec(
 | 资产分配用横向条形图，不用饼图 | 占比相近时饼图难以分辨大小；条形图同一基线、按大小排序，旁边的表格给出精确数字 |
 | 网页路由全部 async，共用一个 SQLite 连接 | 单用户，请求在事件循环里串行执行，不用处理并发和连接池 |
 | 前端库随项目分发（约 1.6 MB） | 不依赖 CDN；版本与校验值记在 `static/vendor/README.md` |
+| MCP 与网页同进程，挂在 `/mcp` | 共用服务层和数据库连接，不用处理多进程写同一个 SQLite；部署只有一个进程 |
+| MCP 用静态 Bearer token，不用 OAuth | 只有本机的 Hermes / Claude Code 访问；OAuth 需要另有授权服务器，单用户没有收益 |
+| MCP 撤销一步完成，不再两步 | 与网页一致；撤销只写回改前状态，误撤销可以再改回来；由服务端说明要求模型先征得同意 |

@@ -8,8 +8,10 @@
 
 from __future__ import annotations
 
+import contextlib
 import functools
 import hashlib
+from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
@@ -25,6 +27,7 @@ from portfolio_monitor.app import App
 from portfolio_monitor.domain.instruments import MARKETS
 from portfolio_monitor.domain.models import AssetClass
 from portfolio_monitor.entry.formatting import ACCOUNT_KIND_LABELS, ASSET_CLASS_LABELS, money, pct
+from portfolio_monitor.entry.mcp import build_mcp, mcp_route
 from portfolio_monitor.entry.web import api
 from portfolio_monitor.services.edit import EditError
 from portfolio_monitor.services.query import RANGES
@@ -61,12 +64,28 @@ def _is_cross_site(request: Request) -> bool:
     return urlparse(origin).netloc not in hosts
 
 
-def create_app(pm: App) -> FastAPI:
+def create_app(pm: App, *, mcp_token: str | None = None) -> FastAPI:
+    """mcp_token 为空时不开放 /mcp。"""
+    mcp_server = mcp = None
+    if mcp_token:
+        mcp_server = build_mcp(pm)
+        mcp = mcp_route(mcp_server, mcp_token)
+
+    @contextlib.asynccontextmanager
+    async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+        if mcp_server is None:
+            yield
+            return
+        async with mcp_server.session_manager.run():
+            yield
+
     web = FastAPI(title="portfolio-monitor", version=__version__, docs_url=None, redoc_url=None,
-                  openapi_url="/api/v1/openapi.json")
+                  openapi_url="/api/v1/openapi.json", lifespan=lifespan)
     web.state.pm = pm
     web.mount("/static", StaticFiles(directory=STATIC), name="static")
     web.include_router(api.router)
+    if mcp is not None:
+        web.router.routes.append(mcp)
 
     templates = Jinja2Templates(directory=HERE / "templates")
     env = templates.env
