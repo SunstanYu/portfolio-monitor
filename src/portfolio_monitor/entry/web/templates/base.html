@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}组合监测{% endblock %}</title>
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="{{ static('vendor/tabulator_simple.min.css') }}">
+  <link rel="stylesheet" href="{{ static('app.css') }}">
+  {# 422（校验失败）也把返回的错误说明放进表单；其他 4xx/5xx 交给 app.js 提示 #}
+  <meta name="htmx-config" content='{"responseHandling":[{"code":"204","swap":false},{"code":"[23]..","swap":true},{"code":"422","swap":true},{"code":"[45]..","swap":false,"error":true}]}'>
+</head>
+<body data-page="{{ page|default('') }}">
+  <header class="topbar">
+    <div class="topbar-inner">
+      <a class="brand" href="/">组合监测</a>
+      <nav>
+        <a href="/" {% if page == 'dashboard' %}aria-current="page"{% endif %}>总览</a>
+        <a href="/changes" {% if page == 'changes' %}aria-current="page"{% endif %}>修改记录</a>
+        <a href="/sync" {% if page == 'sync' %}aria-current="page"{% endif %}>同步状态</a>
+      </nav>
+      {% if latest %}<span class="asof">估值日 {{ latest }}</span>{% endif %}
+    </div>
+  </header>
+  <main>
+    <div id="flash">{% block flash %}{% endblock %}</div>
+    {% block content %}{% endblock %}
+  </main>
+  <script src="{{ static('vendor/htmx.min.js') }}"></script>
+  <script src="{{ static('vendor/tabulator.min.js') }}"></script>
+  {% block scripts %}{% endblock %}
+  <script src="{{ static('app.js') }}"></script>
+</body>
+</html>

@@ -6,12 +6,13 @@ from portfolio_monitor.storage.db import connect, migrate, schema_version
 
 def test_migrations_run_once(tmp_path):
     conn = connect(tmp_path / "x.sqlite")
-    assert migrate(conn) == ["0001_init.sql"]
+    assert migrate(conn) == ["0001_init.sql", "0002_change_log.sql"]
     assert migrate(conn) == []
-    assert schema_version(conn) == 1
+    assert schema_version(conn) == 2
     tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
     assert {"accounts", "instruments", "positions", "cash_balances", "cash_flows", "fx_rates",
-            "daily_nav", "manual_holdings", "manual_cash", "sync_runs", "unresolved_symbols"} <= tables
+            "daily_nav", "manual_holdings", "manual_cash", "sync_runs", "unresolved_symbols",
+            "change_log"} <= tables
 
 
 def test_accounts_follow_config(repo):

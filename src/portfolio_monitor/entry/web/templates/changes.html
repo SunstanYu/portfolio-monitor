@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block title %}修改记录 · 组合监测{% endblock %}
+{% block flash %}{% include "_flash.html" %}{% endblock %}
+{% block content %}
+<section class="card">
+  <div class="card-head">
+    <h2>修改记录 <small>手动账户的每次修改，来自网页、接口或 MCP</small></h2>
+  </div>
+  <p class="hint">撤销要从后往前：同一项被改过多次时，先撤销最近那次。</p>
+  <div class="table-wrap"><div data-table="changes"></div></div>
+</section>
+{% endblock %}

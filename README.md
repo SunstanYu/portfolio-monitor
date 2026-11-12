@@ -8,10 +8,10 @@
 
 ```bash
 uv sync
-uv run portfolio-monitor demo --days 180
+uv run portfolio-monitor demo --days 180 --serve
 ```
 
-用假数据源 + 手动账户跑完整流程（快照 → 汇率 → 净值 → TWR → 聚合），数据写在 `data/demo/`。
+用假数据源 + 手动账户跑完整流程（快照 → 汇率 → 净值 → TWR → 聚合），数据写在 `data/demo/`；加 `--serve` 后打开 http://127.0.0.1:8000 看网页，手动账户（示例 A 股、示例银行）可以直接在网页上修改。
 
 ## 命令
 
@@ -21,7 +21,19 @@ uv run portfolio-monitor overview [--date ...]          # 概览：总资产、�
 uv run portfolio-monitor holdings --by asset_class      # 持仓：instrument_id / account_id / asset_class / currency / region / sector
 uv run portfolio-monitor performance --last 20          # TWR 收益率序列
 uv run portfolio-monitor migrate                        # 初始化 / 升级数据库
+uv run portfolio-monitor serve [--host 127.0.0.1 --port 8000]   # 启动网页（默认只监听本机）
 ```
+
+## 网页
+
+| 页面 | 内容 |
+|---|---|
+| `/` | 总资产与收益、收益率和回撤曲线、资产分配、账户、月度收益 |
+| `/accounts/<id>` | 持仓、现金、资金进出；手动账户可新增 / 修改 / 删除持仓、改现金、记入金出金 |
+| `/changes` | 修改记录，可撤销 |
+| `/sync` | 各数据源每次同步的结果 |
+
+JSON 接口在 `/api/v1/...`（概览、持仓、曲线、月度收益、表格、修改记录）；写入分两步：`POST /api/v1/changes/preview` 返回改前 → 改后，`POST /api/v1/changes/<id>/confirm` 后才生效。
 
 ## 配置与凭据
 

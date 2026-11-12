@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}同步状态 · 组合监测{% endblock %}
+{% block content %}
+<section class="card">
+  <div class="card-head">
+    <h2>同步状态 <small>每个数据源每次运行的结果，新的在前</small></h2>
+  </div>
+  <p class="hint">数据源失败时，该账户沿用上一次的快照，净值标记为"含沿用数据"，第二天同步成功后恢复。手动账户被修改后也会单独刷新一次。</p>
+  <div class="table-wrap"><div data-table="sync_runs"></div></div>
+</section>
+{% endblock %}

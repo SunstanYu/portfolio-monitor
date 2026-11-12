@@ -126,6 +126,10 @@ class Repository:
             (status, utc_now(), error, raw_path, n_pos, n_cash, n_flows, run_id),
         )
 
+    def sync_run_history(self, limit: int = 200) -> list[dict[str, Any]]:
+        rows = self.conn.execute("SELECT * FROM sync_runs ORDER BY id DESC LIMIT ?", (limit,))
+        return [dict(r) for r in rows]
+
     def latest_sync_runs(self, as_of: date) -> list[dict[str, Any]]:
         """每个数据源在该日最近一次运行。"""
         rows = self.conn.execute(
@@ -272,6 +276,25 @@ class Repository:
             for r in self.conn.execute(sql, args)
         ]
 
+    def cash_flow_rows(self, account_id: str) -> list[dict[str, Any]]:
+        """某账户全部资金进出（含来源、录入时间），新的在前。"""
+        rows = self.conn.execute(
+            "SELECT * FROM cash_flows WHERE account_id=? ORDER BY date DESC, id DESC", (account_id,)
+        )
+        return [dict(r) for r in rows]
+
+    def get_cash_flow(self, account_id: str, external_id: str) -> dict[str, Any] | None:
+        row = self.conn.execute(
+            "SELECT date, currency, amount, note FROM cash_flows WHERE account_id=? AND external_id=?",
+            (account_id, external_id),
+        ).fetchone()
+        return dict(row) if row else None
+
+    def delete_cash_flow(self, account_id: str, external_id: str) -> None:
+        self.conn.execute(
+            "DELETE FROM cash_flows WHERE account_id=? AND external_id=?", (account_id, external_id)
+        )
+
     # ---------- 汇率 ----------
 
     def upsert_fx(
@@ -360,6 +383,25 @@ class Repository:
             (account_id, currency, amount, utc_now()),
         )
 
+    def remove_manual_cash(self, account_id: str, currency: str) -> None:
+        self.conn.execute(
+            "DELETE FROM manual_cash WHERE account_id=? AND currency=?", (account_id, currency)
+        )
+
+    def get_manual_holding(self, account_id: str, instrument_id: str) -> dict[str, Any] | None:
+        row = self.conn.execute(
+            "SELECT quantity, price, cost_basis, currency FROM manual_holdings"
+            " WHERE account_id=? AND instrument_id=?",
+            (account_id, instrument_id),
+        ).fetchone()
+        return dict(row) if row else None
+
+    def get_manual_cash(self, account_id: str, currency: str) -> float | None:
+        row = self.conn.execute(
+            "SELECT amount FROM manual_cash WHERE account_id=? AND currency=?", (account_id, currency)
+        ).fetchone()
+        return row[0] if row else None
+
     def manual_holdings(self, account_id: str) -> list[dict[str, Any]]:
         rows = self.conn.execute(
             "SELECT * FROM manual_holdings WHERE account_id=? ORDER BY instrument_id", (account_id,)
@@ -371,6 +413,59 @@ class Repository:
             "SELECT * FROM manual_cash WHERE account_id=? ORDER BY currency", (account_id,)
         )
         return [dict(r) for r in rows]
+
+    # ---------- 修改日志 ----------
+
+    _CHANGE_JSON = ("request", "before", "after", "instrument")
+
+    def insert_change(self, **fields: Any) -> int:
+        fields = {k: self._json_out(k, v) for k, v in fields.items()}
+        cols = list(fields)
+        cur = self.conn.execute(
+            f"INSERT INTO change_log ({', '.join(cols)}) VALUES ({_placeholders(cols)})",
+            [fields[c] for c in cols],
+        )
+        return int(cur.lastrowid)
+
+    def update_change(self, change_id: int, **fields: Any) -> None:
+        fields = {k: self._json_out(k, v) for k, v in fields.items()}
+        sets = ", ".join(f"{k}=?" for k in fields)
+        self.conn.execute(f"UPDATE change_log SET {sets} WHERE id=?", (*fields.values(), change_id))
+
+    def get_change(self, change_id: int) -> dict[str, Any] | None:
+        row = self.conn.execute("SELECT * FROM change_log WHERE id=?", (change_id,)).fetchone()
+        return self._change(row) if row else None
+
+    def list_changes(
+        self, *, account_id: str | None = None, statuses: Sequence[str] | None = None,
+        after_id: int | None = None, limit: int = 200,
+    ) -> list[dict[str, Any]]:
+        """新的在前。"""
+        sql, args = "SELECT * FROM change_log WHERE 1=1", []
+        if account_id is not None:
+            sql += " AND account_id=?"
+            args.append(account_id)
+        if statuses:
+            sql += f" AND status IN ({_placeholders(statuses)})"
+            args.extend(statuses)
+        if after_id is not None:
+            sql += " AND id>?"
+            args.append(after_id)
+        sql += " ORDER BY id DESC LIMIT ?"
+        args.append(limit)
+        return [self._change(r) for r in self.conn.execute(sql, args)]
+
+    def _json_out(self, key: str, value: Any) -> Any:
+        if key in self._CHANGE_JSON and value is not None:
+            return json.dumps(value, ensure_ascii=False, sort_keys=True, default=str)
+        return value
+
+    def _change(self, row: sqlite3.Row) -> dict[str, Any]:
+        out = dict(row)
+        for k in self._CHANGE_JSON:
+            if out.get(k) is not None:
+                out[k] = json.loads(out[k])
+        return out
 
     # ---------- 待处理标的 ----------
 
