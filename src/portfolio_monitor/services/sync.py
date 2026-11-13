@@ -1,4 +1,4 @@
-"""每日同步：各数据源 → 快照 → 汇率 → 净值。
+"""每日同步：各数据源 → 快照 → 汇率 → 净值 → 风险规则。
 
 - 每个数据源独立运行、独立事务：一个失败不影响其他
 - 数据源失败时沿用该账户最近一次快照（标记 carried_forward），避免净值凭空下跌
@@ -14,6 +14,7 @@ from collections import defaultdict
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from portfolio_monitor.domain import valuation
 from portfolio_monitor.domain.models import Account
@@ -21,6 +22,10 @@ from portfolio_monitor.sources.base import HistorySource, Source, validate_histo
 from portfolio_monitor.sources.fx import FxProvider
 from portfolio_monitor.storage.db import transaction
 from portfolio_monitor.storage.repository import Repository
+
+if TYPE_CHECKING:
+    from portfolio_monitor.domain.rules import Alert
+    from portfolio_monitor.services.risk import RiskService
 
 
 @dataclass
@@ -69,6 +74,8 @@ class SyncReport:
     nav_total: float | None
     nav_investable: float | None
     stale: bool
+    alerts: list[Alert] = field(default_factory=list)
+    alerts_error: str | None = None  # 规则执行出错（同步结果照常写入）
 
     @property
     def ok(self) -> bool:
@@ -76,6 +83,7 @@ class SyncReport:
             all(s.status == "ok" for s in self.sources)
             and self.fx_status in ("ok", "not_needed")
             and self.nav_total is not None
+            and self.alerts_error is None
         )
 
 
@@ -86,11 +94,13 @@ class SyncService:
         sources: Mapping[str, Source],
         fx: FxProvider,
         raw_dir: Path,
+        risk: RiskService | None = None,
     ) -> None:
         self.repo = repo
         self.sources = sources
         self.fx = fx
         self.raw_dir = raw_dir
+        self.risk = risk  # 算完净值后执行风险规则
 
     def run(self, as_of: dt.date, only: str | None = None, *, refetch_fx: bool = True) -> SyncReport:
         """同步全部数据源。
@@ -108,7 +118,15 @@ class SyncService:
         nav_total, nav_investable, stale, nav_detail = self._compute_nav(as_of)
         if nav_detail:
             fx_detail = "；".join(x for x in (fx_detail, nav_detail) if x)
-        return SyncReport(as_of, results, fx_status, fx_detail, nav_total, nav_investable, stale)
+        alerts: list[Alert] = []
+        alerts_error = None
+        if self.risk is not None and nav_total is not None:
+            try:
+                alerts = self.risk.evaluate(as_of)
+            except Exception as e:  # 规则出错不影响已写入的快照和净值
+                alerts_error = f"{type(e).__name__}: {e}"
+        return SyncReport(as_of, results, fx_status, fx_detail, nav_total, nav_investable, stale,
+                          alerts, alerts_error)
 
     def recompute_nav(self) -> int:
         """按现有快照和汇率重算全部净值，返回成功的天数。"""

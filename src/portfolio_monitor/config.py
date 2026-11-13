@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from portfolio_monitor.domain.models import Account
+from portfolio_monitor.domain.rules import RuleConfig, parse_rule_config
 
 SUPPORTED_BASE_CURRENCIES = ("USD",)
 
@@ -26,6 +27,7 @@ class Settings:
     sources: dict[str, dict[str, Any]] = field(default_factory=dict)
     fx_provider: str = "frankfurter"
     base_currency: str = "USD"
+    rules: RuleConfig = field(default_factory=RuleConfig)
 
     @property
     def db_path(self) -> Path:
@@ -67,6 +69,7 @@ def parse_settings(data: dict[str, Any], *, config_path: Path | None, root: Path
         sources={k: dict(v) for k, v in data.get("sources", {}).items()},
         fx_provider=data.get("fx", {}).get("provider", "frankfurter"),
         base_currency=base,
+        rules=parse_rule_config(data.get("rules", {}), data.get("targets", {})),
     )
 
 

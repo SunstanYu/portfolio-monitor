@@ -10,6 +10,7 @@ from zoneinfo import ZoneInfo
 from portfolio_monitor.config import Settings
 from portfolio_monitor.services.edit import EditService
 from portfolio_monitor.services.query import QueryService
+from portfolio_monitor.services.risk import RiskService
 from portfolio_monitor.services.sync import SyncService
 from portfolio_monitor.sources.base import Source, SourceContext
 from portfolio_monitor.sources.fx import FxProvider, build_fx
@@ -32,6 +33,7 @@ class App:
     sync: SyncService
     query: QueryService
     edit: EditService
+    risk: RiskService
 
     def close(self) -> None:
         self.repo.conn.close()
@@ -48,5 +50,7 @@ def open_app(settings: Settings, *, fx: FxProvider | None = None) -> App:
         ctx = SourceContext(repo=repo, settings=settings.sources.get(name, {}), env=os.environ)
         sources[name] = build_source(name, ctx)
 
-    sync = SyncService(repo, sources, fx or build_fx(settings.fx_provider), settings.raw_dir)
-    return App(settings, repo, sync, QueryService(repo), EditService(repo, sync, today_ny))
+    query = QueryService(repo)
+    risk = RiskService(repo, query, settings.rules)
+    sync = SyncService(repo, sources, fx or build_fx(settings.fx_provider), settings.raw_dir, risk=risk)
+    return App(settings, repo, sync, query, EditService(repo, sync, today_ny), risk)

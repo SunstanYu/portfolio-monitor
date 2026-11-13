@@ -137,7 +137,7 @@ def create_app(pm: App, *, mcp_token: str | None = None) -> FastAPI:
         overview = pm.query.overview()
         failed = [s for s in overview.sources if s.status != "ok"]
         return render(request, "dashboard.html", page="dashboard", o=overview, failed=failed,
-                      ranges=RANGES, asset_labels=ASSET_CLASS_LABELS)
+                      risk=pm.risk.alerts(overview.as_of), ranges=RANGES, asset_labels=ASSET_CLASS_LABELS)
 
     @web.get("/accounts/{account_id}", response_class=HTMLResponse)
     async def account(request: Request, account_id: str, change: int | None = None,

@@ -38,6 +38,22 @@
   </div>
 </section>
 
+{% if risk.alerts %}
+<section class="card" aria-labelledby="risk-title">
+  <div class="card-head"><h2 id="risk-title">风险提示 <small>严重 {{ risk.critical }} · 提示 {{ risk.warn }}</small></h2></div>
+  <ul class="risk-list">
+    {% for a in risk.alerts %}
+    <li class="risk-item">
+      <span class="risk-level {{ 'risk-critical' if a.severity == 'critical' else 'risk-warn' }}">{{ '严重' if a.severity == 'critical' else '提示' }}</span>
+      <span class="risk-rule">{{ a.rule_name }}</span>
+      <span class="risk-msg">{{ a.message }}</span>
+      <span class="risk-since">{% if a.escalated %}升级为严重{% elif a.new %}新出现{% else %}自 {{ a.since }} 起{% endif %}</span>
+    </li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
+
 <section class="card">
   <div class="card-head">
     <h2>收益走势 <small>投资资产，剔除入金出金</small></h2>

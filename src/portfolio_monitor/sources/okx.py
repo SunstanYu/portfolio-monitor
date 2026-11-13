@@ -14,7 +14,7 @@ OKX 只给当前余额，不能取历史：只能同步纽约时间的当天，�
   （没有时依次用交易账户自己的 eqUsd、质押凭证的底层币、稳定币按 1；都没有就市值记 0 并提示）
 - 稳定币（USDT、USDC 等）资产类别记为现金
 - 永续 / 交割合约：编号 UNKNOWN:okx:<合约>，登记待处理；市值 = 未实现盈亏。交易账户的权益已含这部分
-  盈亏，从保证金币种的数量里扣掉，账户总值不变；名义价值留在存档里
+  盈亏，从保证金币种的数量里扣掉，账户总值不变；名义价值（USD，空头为负）记在持仓的 notional，供杠杆规则用
 - 杠杆（MARGIN）持仓已体现在各币种权益和负债里，不单独列；期权暂不支持，出现时提示
 - 资金进出：已完成的充值（入）和提现（出），按纽约日期记；金额按当天（UTC）USD 日线收盘价折算，
   当天的用当前指数价；提现手续费不算出金（算亏损）；按充值 / 提现编号去重
@@ -262,9 +262,12 @@ def parse_holdings(
         sample = {k: p.get(k) for k in ("instType", "instId", "mgnMode", "posSide") if p.get(k)}
         instruments[iid] = Instrument(id=iid, name=inst_id, asset_class=AssetClass.OTHER, region="GLOBAL",
                                       currency="USD", extra={"okx": sample})
-        m = derivatives.setdefault(iid, {"quantity": 0.0, "value": 0.0, "raw": inst_id, "sample": sample})
-        m["quantity"] += _f(p.get("pos"))
+        m = derivatives.setdefault(iid, {"quantity": 0.0, "value": 0.0, "notional": 0.0, "raw": inst_id,
+                                         "sample": sample})
+        pos = _f(p.get("pos"))
+        m["quantity"] += pos
         m["value"] += upl * (price or 0.0)
+        m["notional"] += abs(_f(p.get("notionalUsd"))) * (-1 if pos < 0 else 1)  # 空头记负
 
     positions: list[Position] = []
     for ccy in sorted(quantity):
@@ -282,7 +285,7 @@ def parse_holdings(
                                   market_value=q * (price or 0.0), currency="USD"))
     for iid, m in derivatives.items():
         positions.append(Position(account_id=account_id, instrument_id=iid, quantity=m["quantity"],
-                                  market_value=m["value"], currency="USD"))
+                                  market_value=m["value"], currency="USD", notional=m["notional"]))
         unresolved.append(UnresolvedSymbol(account_id=account_id, raw_symbol=m["raw"], sample=m["sample"]))
     return positions, list(instruments.values()), unresolved, warnings
 

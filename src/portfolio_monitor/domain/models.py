@@ -79,6 +79,7 @@ class Position(_Model):
     market_value: Finite
     cost_basis: OptFinite = None
     currency: Currency
+    notional: OptFinite = None  # 名义价值（合约等衍生品的敞口，原币），用于杠杆规则
 
 
 class CashBalance(_Model):

@@ -28,6 +28,7 @@ from portfolio_monitor.app import App
 from portfolio_monitor.domain.models import AssetClass
 from portfolio_monitor.services.edit import ChangeView, EditError
 from portfolio_monitor.services.query import RANGES, AccountSummary, CurvePoint, MonthReturn, Overview
+from portfolio_monitor.services.risk import AlertsResult
 
 MIN_TOKEN_LENGTH = 32
 
@@ -177,6 +178,15 @@ def build_mcp(pm: App) -> MCPServer:
     ) -> ChangesResult:
         """手动账户的修改记录（新到旧）：来源、内容摘要、状态（待确认 / 已生效 / 已撤销 / 已放弃）、能否撤销。"""
         return ChangesResult(changes=edit.list(account_id=account_id, limit=limit))
+
+    @mcp.tool(title="风险提示", annotations=READ)
+    @_friendly
+    async def get_risk_alerts(date: DateArg = None) -> AlertsResult:
+        """触发的风险提示：单一标的 / 账户集中度、偏离目标配置、现金占比、杠杆敞口、回撤、单日跌幅、数据源连续失败、疑似数据错误。
+
+        每条有级别（warn 提示 / critical 严重）、当前值和越过的阈值（比例为小数）、从哪个估值日起连续出现（since）、
+        是否今天新出现（new）、是否今天升级为严重（escalated）。阈值由用户在配置文件 [rules.*] 里设置。"""
+        return pm.risk.alerts(date)
 
     # ----- 写入：先预览，confirm_change 后生效 -----
 
