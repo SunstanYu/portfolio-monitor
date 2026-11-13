@@ -9,6 +9,7 @@ from __future__ import annotations
 import datetime as dt
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 from portfolio_monitor.domain.instruments import is_canonical
@@ -33,6 +34,7 @@ class SourceContext:
     repo: Repository
     settings: Mapping[str, Any] = field(default_factory=dict)
     env: Mapping[str, str] = field(default_factory=dict)
+    data_dir: Path | None = None  # 数据源需要在本地存东西时用（如盈立的登录 token）
 
 
 class Source(Protocol):

@@ -47,7 +47,8 @@ def open_app(settings: Settings, *, fx: FxProvider | None = None) -> App:
 
     sources: dict[str, Source] = {}
     for name in sorted({a.source for a in settings.accounts if a.active}):
-        ctx = SourceContext(repo=repo, settings=settings.sources.get(name, {}), env=os.environ)
+        ctx = SourceContext(repo=repo, settings=settings.sources.get(name, {}), env=os.environ,
+                            data_dir=settings.data_dir)
         sources[name] = build_source(name, ctx)
 
     query = QueryService(repo)

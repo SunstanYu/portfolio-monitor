@@ -32,9 +32,12 @@
       <button type="button" class="btn" data-open="dlg-cash">改现金</button>
       <button type="button" class="btn" data-open="dlg-flow">记入金 / 出金</button>
     </div>
+    {% elif a.flows_editable %}
+    <div class="toolbar"><button type="button" class="btn" data-open="dlg-flow">记入金 / 出金</button></div>
     {% endif %}
   </div>
-  {% if a.editable %}<p class="hint">修改立即反映到最新估值日（{{ effective }}）的快照和净值上，可在提示条或修改记录里撤销。</p>{% endif %}
+  {% if a.editable %}<p class="hint">修改立即反映到最新估值日（{{ effective }}）的快照和净值上，可在提示条或修改记录里撤销。</p>
+  {% elif a.flows_editable %}<p class="hint">持仓和现金来自 {{ a.source }}，但接口拿不到资金流水：存钱、取钱请在这里记入金 / 出金（只记流水、不改现金），否则会被算成收益。</p>{% endif %}
   <div class="table-wrap"><div id="positions-table" data-table="positions" data-account-id="{{ a.id }}"></div></div>
 </section>
 
@@ -106,6 +109,8 @@
   </form>
 </dialog>
 
+{% endif %}
+{% if a.flows_editable %}
 <dialog id="dlg-flow" aria-labelledby="dlg-flow-title">
   <form hx-post="/accounts/{{ a.id }}/edit" hx-target="find .form-msg" hx-swap="innerHTML">
     <h2 id="dlg-flow-title">记入金 / 出金</h2>
@@ -126,6 +131,7 @@
         <input name="note" autocomplete="off">
       </label>
     </div>
+    {% if a.editable %}
     <label class="check">
       <input type="checkbox" name="adjust_cash" checked data-toggle="flow-date">
       同时调整现金余额（记在最新估值日 {{ effective }}）
@@ -133,6 +139,11 @@
     <label id="flow-date" class="flow-date" hidden>日期 <span class="opt">只记流水、不改现金时可选</span>
       <input type="date" name="date" max="{{ effective }}">
     </label>
+    {% else %}
+    <label class="flow-date">日期 <span class="opt">可选，默认最新估值日 {{ effective }}</span>
+      <input type="date" name="date" max="{{ effective }}">
+    </label>
+    {% endif %}
     <p class="hint">入金出金在收益率（TWR）里会被剔除，不算赚亏。</p>
     <div class="form-msg" aria-live="polite"></div>
     <div class="dialog-actions">

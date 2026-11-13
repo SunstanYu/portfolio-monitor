@@ -34,7 +34,8 @@ MIN_TOKEN_LENGTH = 32
 
 INSTRUCTIONS = """\
 个人投资组合监测。金额字段名带 _usd 的是美元，其余为原币；收益率是时间加权收益率（TWR），已剔除入金出金。
-只有手动账户（get_accounts 里 editable=true）可以修改。修改分两步：
+只有手动账户（get_accounts 里 editable=true）可以修改；接口拿不到资金流水的账户（flows_editable=true、editable=false，如盈立）
+只能用 record_cash_flow 记入金出金，且只记流水、不改现金。修改分两步：
 1. 调用 set_holding / remove_holding / set_cash_balance / record_cash_flow，得到 change_id 和"改前 → 改后"的预览；
 2. 把预览原样告诉用户，等用户明确同意后再调用 confirm_change(change_id)。
 待确认的修改 30 分钟后作废。undo_change 会立即撤销一次已生效的修改，调用前同样要先征得用户同意。"""
@@ -243,7 +244,9 @@ def build_mcp(pm: App) -> MCPServer:
         )] = True,
         date: Annotated[dt.date | None, Field(description="日期，仅 adjust_cash=false 时可填")] = None,
     ) -> ChangeView:
-        """预览：记录一笔入金或出金，收益率计算会把它剔除。用户同意后调用 confirm_change 才生效。"""
+        """预览：记录一笔入金或出金，收益率计算会把它剔除。用户同意后调用 confirm_change 才生效。
+
+        手动账户可同时调整现金；flows_editable 但不可编辑的账户（现金来自数据源）一律只记流水。"""
         return preview("record_flow", account_id=account_id, currency=currency, amount=amount, note=note,
                        adjust_cash=adjust_cash, date=date)
 

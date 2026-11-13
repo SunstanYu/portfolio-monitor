@@ -30,6 +30,7 @@ from portfolio_monitor.domain.instruments import (
 )
 from portfolio_monitor.domain.models import Account, AssetClass, CashFlow, Currency, Instrument
 from portfolio_monitor.services.sync import SyncService
+from portfolio_monitor.sources.registry import MANUAL_FLOW_SOURCES
 from portfolio_monitor.storage.db import transaction, utc_now
 from portfolio_monitor.storage.repository import Repository
 
@@ -288,6 +289,11 @@ class EditService:
     # ----- 生成"改前 → 改后" -----
 
     def _plan(self, req: SetHolding | RemoveHolding | SetCash | RecordFlow) -> _Plan:
+        if isinstance(req, RecordFlow):
+            account = self._flow_account(req.account_id)
+            if account.source != "manual":
+                req = req.model_copy(update={"adjust_cash": False})  # 现金来自数据源，只记流水
+            return self._plan_record_flow(account, req)
         account = self._manual_account(req.account_id)
         if isinstance(req, SetHolding):
             return self._plan_set_holding(account, req)
@@ -296,6 +302,18 @@ class EditService:
         if isinstance(req, SetCash):
             return self._plan_set_cash(account, req)
         return self._plan_record_flow(account, req)
+
+    def _flow_account(self, account_id: str) -> Account:
+        """能手动记资金进出的账户：手动账户，以及接口拿不到资金流水的数据源（MANUAL_FLOW_SOURCES）。"""
+        account = self.repo.get_account(account_id)
+        if account is not None and account.active and account.source in MANUAL_FLOW_SOURCES:
+            return account
+        try:
+            return self._manual_account(account_id)
+        except EditError as e:
+            if account is not None and account.source != "manual":
+                raise EditError(f"{account.name} 的资金进出由 {account.source} 同步，不能手动记") from e
+            raise
 
     def _manual_account(self, account_id: str) -> Account:
         account = self.repo.get_account(account_id)

@@ -80,6 +80,19 @@ uv run --env-file .env portfolio-monitor sync
 
 OKX 只给当前余额：只能同步当天，不能回填；首次同步那天的市值算转入。持仓合计与 OKX 自己的估值相差超过 1% 时，同步结果里会提示。
 
+## 盈立新加坡
+
+用官方 Open API 只读取数（api-doc.usmart.sg）：
+
+1. 盈立官网 → 个人中心 → 我的 API：拿到渠道号、公钥、私钥
+2. 写进 `.env`（`USMART_CHANNEL`、`USMART_AREA_CODE`、`USMART_PHONE`、`USMART_LOGIN_PASSWORD`、`USMART_PRIVATE_KEY`、`USMART_PUBLIC_KEY`，见 `.env.example`）；登录密码是 App 的登录密码，不是交易密码
+3. `local/config.toml` 里加一个 `source = "usmart"` 的账户，然后照常 `sync`
+
+- 登录拿到的 token 缓存在 `data/secrets/`（约 30 天有效），不会每次同步都登录
+- 登录被拒（如密码错误）后不会自动重试，免得账户被锁；改了 `.env` 里的手机号或密码才会再试
+- 现金 = 总资产 − 持仓市值，记为美元；期权市值按 × 100 计
+- 资金流水接口不可用：存钱、取钱请在网页账户页或 MCP（`record_cash_flow`）记入金 / 出金，否则会被算成收益
+
 ## 风险规则
 
 每日同步算完净值后自动检查：单一标的 / 账户集中度、偏离目标配置、现金占比、杠杆敞口、回撤、单日跌幅、数据源连续失败、疑似数据错误。结果在 `sync` 的输出、网页仪表盘、`/api/v1/alerts` 和 MCP 的 `get_risk_alerts` 里，并标出新出现的和持续多久。

@@ -33,6 +33,9 @@ from portfolio_monitor.domain.instruments import (
         # 加密货币必须带提示
         ("btc", "CRYPTO", "CRYPTO:BTC"),
         ("USDT", "crypto", "CRYPTO:USDT"),
+        # 新加坡交易所
+        ("D05.SI", None, "SG:D05"),
+        ("c6l", "SG", "SG:C6L"),
     ],
 )
 def test_normalize(raw, market, expected):
@@ -61,7 +64,7 @@ def test_unknown_id_is_canonical_placeholder():
     ("instrument_id", "yahoo"),
     [("US:BRK.B", "BRK-B"), ("HK:00700", "0700.HK"), ("HK:09988", "9988.HK"),
      ("CN:600519", "600519.SS"), ("CN:000001", "000001.SZ"), ("CN:300750", "300750.SZ"),
-     ("CRYPTO:BTC", "BTC-USD"), ("UNKNOWN:x:y", None)],
+     ("SG:D05", "D05.SI"), ("CRYPTO:BTC", "BTC-USD"), ("UNKNOWN:x:y", None)],
 )
 def test_to_yahoo(instrument_id, yahoo):
     assert to_yahoo(instrument_id) == yahoo
@@ -70,4 +73,5 @@ def test_to_yahoo(instrument_id, yahoo):
 def test_default_currency():
     assert default_currency("HK:00700") == "HKD"
     assert default_currency("CN:600519") == "CNY"
+    assert default_currency("SG:D05") == "SGD"
     assert default_currency("UNKNOWN:x:y") is None

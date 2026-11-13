@@ -1,0 +1,29 @@
+{
+  "_comment": "虚构的盈立新加坡 Open API 返回（代码、数量、金额全部为编造），字段与实测一致；港币汇率按 7.8",
+  "holdings": [
+    {"exchangeType": "0", "stockCode": "09988", "stockName": "阿里巴巴-W", "currentAmount": "200", "enableAmount": "200",
+     "frozenAmount": "0", "oddAmount": "0", "lastPrice": "100.000", "costPriceAccurate": "90.000",
+     "holdingBalance": "5000.00", "holdingBalancePercent": "14.29", "dailyBalance": "100.00", "dailyBalancePercent": "0.25"},
+    {"exchangeType": "5", "stockCode": "AAPL", "stockName": "苹果", "currentAmount": "10", "enableAmount": "10",
+     "frozenAmount": "0", "oddAmount": "0", "lastPrice": "200.00", "costPriceAccurate": "150.00",
+     "holdingBalance": "500.00", "holdingBalancePercent": "33.33", "dailyBalance": "5.00", "dailyBalancePercent": "0.25"},
+    {"exchangeType": "5", "stockCode": "QQQ", "stockName": "纳指100ETF-Invesco", "currentAmount": "1", "enableAmount": "1",
+     "frozenAmount": "0", "oddAmount": "0", "lastPrice": "500.00", "costPriceAccurate": "450.00",
+     "holdingBalance": "50.00", "holdingBalancePercent": "11.11", "dailyBalance": "1.00", "dailyBalancePercent": "0.20"},
+    {"exchangeType": "5", "stockCode": "TQQQ", "stockName": "三倍做多纳指ETF-ProShares", "currentAmount": "0.00", "enableAmount": "0",
+     "frozenAmount": "0", "oddAmount": "0", "lastPrice": "80.00", "costPriceAccurate": "3000.00",
+     "holdingBalance": "0", "holdingBalancePercent": "0", "dailyBalance": "0", "dailyBalancePercent": "0"},
+    {"exchangeType": "5", "stockCode": "TSLA270115P200000", "stockName": "TSLA 270115 200.0 P", "currentAmount": "-1.00",
+     "enableAmount": "-1", "frozenAmount": "0", "oddAmount": "0", "lastPrice": "12.50", "costPriceAccurate": "15.00",
+     "holdingBalance": "250.00", "holdingBalancePercent": "16.67", "dailyBalance": "10.00", "dailyBalancePercent": "0.80"},
+    {"exchangeType": "5", "stockCode": "12AB", "stockName": "测试证券", "currentAmount": "5", "enableAmount": "5",
+     "frozenAmount": "0", "oddAmount": "0", "lastPrice": "10.00", "costPriceAccurate": "8.00",
+     "holdingBalance": "10.00", "holdingBalancePercent": "25.00", "dailyBalance": "0", "dailyBalancePercent": "0"}
+  ],
+  "asset_usd": {"asset": "20000.00", "marketValue": "3864.10", "enableBalance": "13000.00", "frozenBalance": "0",
+                "onWayBalance": "0", "withdrawBalance": "5000.00", "debitBalance": "0", "purchasePower": "30000.00",
+                "exchangeType": "5", "stockHoldingList": []},
+  "asset_hkd": {"asset": "156000.00", "marketValue": "30139.98", "enableBalance": "101400.00", "frozenBalance": "0",
+                "onWayBalance": "0", "withdrawBalance": "39000.00", "debitBalance": "0", "purchasePower": "234000.00",
+                "exchangeType": "0", "stockHoldingList": []}
+}
