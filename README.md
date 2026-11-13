@@ -64,6 +64,21 @@ uv run --env-file .env portfolio-monitor sync
 
 IBKR 当天的报表次日才能取到：当天同步时自动退到最近一个有数据的交易日，并标记为沿用；次日早上可以只给 IBKR 补跑前一天（`sync --date <前一日> --source ibkr`）。
 
+## OKX
+
+用 API v5 只读 key 取主账户（子账户不读取）：
+
+1. OKX 网页：头像 → API → 创建 API key，权限只勾"读取"；passphrase 自己设，忘了无法找回
+2. 三项写进 `.env`（`OKX_API_KEY`、`OKX_API_SECRET`、`OKX_API_PASSPHRASE`）；值里有 `$` 时用单引号括起来，否则会被当成变量展开
+3. `local/config.toml` 里加一个 `source = "okx"` 的账户（写法见 `config.example.toml`）；美国站、欧洲站的 key 要设 `[sources.okx].host`
+4. 每日同步：
+
+```bash
+uv run --env-file .env portfolio-monitor sync
+```
+
+OKX 只给当前余额：只能同步当天，不能回填；首次同步那天的市值算转入。持仓合计与 OKX 自己的估值相差超过 1% 时，同步结果里会提示。
+
 ## 配置与凭据
 
 - 配置：复制 `config.example.toml` 到 `local/config.toml` 后修改（`local/` 不进 git）

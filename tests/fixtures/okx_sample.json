@@ -1,0 +1,73 @@
+{
+  "_comment": "虚构的 OKX API v5 返回（金额、地址、编号全部为编造），字段与真实返回一致；键为接口路径，值为 data",
+  "/api/v5/account/balance": [
+    {
+      "totalEq": "50049", "upl": "150", "uTime": "1772485200000",
+      "details": [
+        {"ccy": "BTC", "eq": "0.5", "eqUsd": "32500", "cashBal": "0.5", "availBal": "0.5", "upl": "0", "stgyEq": "0", "liab": "0"},
+        {"ccy": "ETH", "eq": "2", "eqUsd": "7000", "cashBal": "2", "availBal": "2", "upl": "0", "stgyEq": "0", "liab": "0"},
+        {"ccy": "USDT", "eq": "10150", "eqUsd": "10150", "cashBal": "10000", "availBal": "9000", "upl": "150", "stgyEq": "0", "liab": "0"},
+        {"ccy": "BETH", "eq": "0.1", "eqUsd": "349", "cashBal": "0.1", "availBal": "0.1", "upl": "0", "stgyEq": "0", "liab": "0"},
+        {"ccy": "ABCXYZ", "eq": "100", "eqUsd": "50", "cashBal": "100", "availBal": "100", "upl": "0", "stgyEq": "0", "liab": "0"},
+        {"ccy": "DOGE", "eq": "0", "eqUsd": "0", "cashBal": "0", "availBal": "0", "upl": "0", "stgyEq": "0", "liab": "0"}
+      ]
+    }
+  ],
+  "/api/v5/account/positions": [
+    {"instType": "SWAP", "instId": "BTC-USDT-SWAP", "ccy": "USDT", "pos": "2", "upl": "150", "notionalUsd": "13000",
+     "mgnMode": "cross", "posSide": "net", "markPx": "65000", "avgPx": "64250"},
+    {"instType": "MARGIN", "instId": "ETH-USDT", "ccy": "USDT", "pos": "1", "upl": "5", "notionalUsd": "3500",
+     "mgnMode": "cross", "posSide": "net", "markPx": "3500", "avgPx": "3495"}
+  ],
+  "/api/v5/asset/balances": [
+    {"ccy": "USDC", "bal": "500", "availBal": "500", "frozenBal": "0"},
+    {"ccy": "NOPRICE", "bal": "10", "availBal": "10", "frozenBal": "0"},
+    {"ccy": "SOL", "bal": "0", "availBal": "0", "frozenBal": "0"}
+  ],
+  "/api/v5/finance/savings/balance": [
+    {"ccy": "USDT", "amt": "2000", "earnings": "5", "rate": "0.05", "loanAmt": "0", "pendingAmt": "0", "redemptAmt": "0"},
+    {"ccy": "ETH", "amt": "1", "earnings": "0.01", "rate": "0.02", "loanAmt": "0", "pendingAmt": "0", "redemptAmt": "0"}
+  ],
+  "/api/v5/finance/staking-defi/eth/balance": [
+    {"ccy": "BETH", "amt": "0.5", "latestInterestAccrual": "0.0001", "totalInterestAccrual": "0.01", "ts": "1772460000000"}
+  ],
+  "/api/v5/finance/staking-defi/sol/balance": [
+    {"ccy": "OKSOL", "amt": "0", "latestInterestAccrual": "0", "totalInterestAccrual": "0", "ts": "1772460000000"}
+  ],
+  "/api/v5/asset/asset-valuation": [
+    {"totalBal": "57790", "ts": "1772485200000", "details": {"classic": "0", "earn": "11240", "funding": "500", "trading": "46050"}}
+  ],
+  "/api/v5/market/index-tickers": [
+    {"instId": "BTC-USD", "idxPx": "65000", "ts": "1772485200000"},
+    {"instId": "ETH-USD", "idxPx": "3500", "ts": "1772485200000"},
+    {"instId": "USDT-USD", "idxPx": "1", "ts": "1772485200000"},
+    {"instId": "USDC-USD", "idxPx": "0.9998", "ts": "1772485200000"},
+    {"instId": "BETH-USD", "idxPx": "3490", "ts": "1772485200000"},
+    {"instId": "BTC-USDT", "idxPx": "65010", "ts": "1772485200000"}
+  ],
+  "/api/v5/asset/deposit-history": [
+    {"depId": "D4", "ccy": "USDT", "chain": "USDT-TRC20", "amt": "100", "state": "2", "ts": "1772460000000",
+     "from": "", "to": "TEST-ADDR-0001", "txId": "0xtest04", "actualDepBlkConfirm": "20"},
+    {"depId": "D3", "ccy": "USDT", "chain": "USDT-TRC20", "amt": "300", "state": "1", "ts": "1772359200000",
+     "from": "", "to": "TEST-ADDR-0001", "txId": "0xtest03", "actualDepBlkConfirm": "2"},
+    {"depId": "D2", "ccy": "BTC", "chain": "BTC-Bitcoin", "amt": "0.1", "state": "2", "ts": "1772161200000",
+     "from": "", "to": "TEST-ADDR-0002", "txId": "0xtest02", "actualDepBlkConfirm": "3"},
+    {"depId": "D1", "ccy": "USDT", "chain": "USDT-TRC20", "amt": "5000", "state": "2", "ts": "1772031600000",
+     "from": "someone@example.com", "areaCodeFrom": "", "to": "TEST-ADDR-0001", "txId": "", "actualDepBlkConfirm": "0"},
+    {"depId": "D0", "ccy": "USDT", "chain": "USDT-TRC20", "amt": "999", "state": "2", "ts": "1768046400000",
+     "from": "", "to": "TEST-ADDR-0001", "txId": "0xtest00", "actualDepBlkConfirm": "20"}
+  ],
+  "/api/v5/asset/withdrawal-history": [
+    {"wdId": "W1", "ccy": "ETH", "chain": "ETH-ERC20", "amt": "0.5", "fee": "0.001", "feeCcy": "ETH", "state": "2",
+     "ts": "1772301600000", "from": "", "to": "0xTESTADDRESS", "txId": "0xtestw1", "note": "测试备注"},
+    {"wdId": "W3", "ccy": "NOPRICE", "chain": "NOPRICE-X", "amt": "1", "fee": "0", "feeCcy": "NOPRICE", "state": "2",
+     "ts": "1772290800000", "from": "", "to": "0xTESTADDRESS", "txId": "0xtestw3"},
+    {"wdId": "W2", "ccy": "ETH", "chain": "ETH-ERC20", "amt": "1", "fee": "0.001", "feeCcy": "ETH", "state": "-1",
+     "ts": "1772193600000", "from": "", "to": "0xTESTADDRESS", "txId": ""}
+  ],
+  "candles": {
+    "USDT-USD": {"2026-02-25": "0.9995"},
+    "BTC-USD": {"2026-02-27": "64000"},
+    "ETH-USD": {"2026-02-28": "3400"}
+  }
+}

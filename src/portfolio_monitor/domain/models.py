@@ -118,11 +118,13 @@ class SourceSnapshot(_Model):
 
     data_date：数据实际所属日期。数据源有延迟（如 IBKR 当天的报表次日才有）时早于 as_of，
     同步时据此判断是否标记为沿用；None 表示就是 as_of。
+    warnings：数据照常写入、但需要人看一眼的问题（如对账有偏差），显示在同步结果里。
     """
 
     source: str
     as_of: dt.date
     data_date: dt.date | None = None
+    warnings: list[str] = Field(default_factory=list)
     positions: list[Position] = Field(default_factory=list)
     cash: list[CashBalance] = Field(default_factory=list)
     flows: list[CashFlow] = Field(default_factory=list)
