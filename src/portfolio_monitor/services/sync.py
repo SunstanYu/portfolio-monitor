@@ -142,10 +142,11 @@ class SyncService:
                     run_id, "ok", raw_path=raw_path,
                     counts=(len(snap.positions), len(snap.cash), new_flows),
                 )
+            notes = ([f"数据截至 {snap.data_date}，按沿用标记"] if behind else []) + snap.warnings
             return SourceResult(
                 name, "ok", positions=len(snap.positions), cash=len(snap.cash),
                 new_flows=new_flows, unresolved=len(snap.unresolved),
-                note=f"数据截至 {snap.data_date}，按沿用标记" if behind else None,
+                note="；".join(notes) or None,
             )
         except Exception as e:  # 隔离单个数据源的任何失败
             error = f"{type(e).__name__}: {e}"

@@ -46,6 +46,19 @@ include_in_returns = false
 # flow_lookback_days = 7               # 每日同步回看几天的资金进出
 # max_lag_days = 4                     # 当天没有报表时最多往前退几天
 
+# OKX（API v5 只读 key，只读主账户）：key、secret、passphrase 放在 .env
+# [[accounts]]
+# id = "okx"
+# name = "OKX"
+# kind = "crypto"
+# source = "okx"
+# currency = "USD"
+#
+# [sources.okx]
+# host = "www.okx.com"          # 美国站 us.okx.com，欧洲站 eea.okx.com（按 key 所在的站点）
+# flow_lookback_days = 30       # 每次同步回看几天的充提记录
+# reconcile_tolerance = 0.01    # 与 OKX 资产估值对账允许的偏差
+
 [sources.fake]
 start = "2025-01-01"
 monthly_deposit = 2000

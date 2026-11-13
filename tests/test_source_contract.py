@@ -12,6 +12,7 @@ from collections.abc import Callable
 
 import pytest
 from flex_mock import FlexMock
+from okx_mock import OkxMock
 
 from portfolio_monitor.domain.instruments import is_canonical
 from portfolio_monitor.domain.models import Account, AssetClass, Instrument
@@ -19,6 +20,7 @@ from portfolio_monitor.sources.base import Source, SourceContext, validate_snaps
 from portfolio_monitor.sources.fake import FakeSource
 from portfolio_monitor.sources.ibkr import IbkrSource
 from portfolio_monitor.sources.manual import ManualSource
+from portfolio_monitor.sources.okx import OkxSource
 from portfolio_monitor.sources.registry import REGISTRY
 from portfolio_monitor.storage.repository import Repository
 
@@ -55,10 +57,17 @@ def _ibkr(repo: Repository) -> tuple[Source, list[Account]]:
     return IbkrSource(SourceContext(repo=repo), client=FlexMock(AS_OF).client()), accounts
 
 
+def _okx(repo: Repository) -> tuple[Source, list[Account]]:
+    accounts = [Account(id="o-main", name="O1", kind="crypto", source="okx", currency="USD")]
+    repo.sync_accounts(accounts)
+    return OkxSource(SourceContext(repo=repo), client=OkxMock().client()), accounts
+
+
 CASES: dict[str, Callable[[Repository], tuple[Source, list[Account]]]] = {
     "fake": _fake,
     "manual": _manual,
     "ibkr": _ibkr,
+    "okx": _okx,
 }
 
 

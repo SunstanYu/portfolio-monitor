@@ -8,11 +8,13 @@ from portfolio_monitor.sources.base import Source, SourceContext
 from portfolio_monitor.sources.fake import FakeSource
 from portfolio_monitor.sources.ibkr import IbkrSource
 from portfolio_monitor.sources.manual import ManualSource
+from portfolio_monitor.sources.okx import OkxSource
 
 REGISTRY: dict[str, Callable[[SourceContext], Source]] = {
     "manual": ManualSource,
     "fake": FakeSource,
     "ibkr": IbkrSource,
+    "okx": OkxSource,
 }
 
 
