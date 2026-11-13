@@ -21,6 +21,7 @@ uv run portfolio-monitor backfill ibkr [--days 365]     # 回填历史净值和�
 uv run portfolio-monitor overview [--date ...]          # 概览：总资产、收益、回撤、资产分配
 uv run portfolio-monitor holdings --by asset_class      # 持仓：instrument_id / account_id / asset_class / currency / region / sector
 uv run portfolio-monitor performance --last 20          # TWR 收益率序列
+uv run portfolio-monitor alerts [--date ...] [--recheck]   # 风险提示；--recheck 用当前阈值重算（不重新拉数据）
 uv run portfolio-monitor migrate                        # 初始化 / 升级数据库
 uv run portfolio-monitor serve [--host 127.0.0.1 --port 8000]   # 启动网页和 MCP（默认只监听本机）
 ```
@@ -78,6 +79,28 @@ uv run --env-file .env portfolio-monitor sync
 ```
 
 OKX 只给当前余额：只能同步当天，不能回填；首次同步那天的市值算转入。持仓合计与 OKX 自己的估值相差超过 1% 时，同步结果里会提示。
+
+## 风险规则
+
+每日同步算完净值后自动检查：单一标的 / 账户集中度、偏离目标配置、现金占比、杠杆敞口、回撤、单日跌幅、数据源连续失败、疑似数据错误。结果在 `sync` 的输出、网页仪表盘、`/api/v1/alerts` 和 MCP 的 `get_risk_alerts` 里，并标出新出现的和持续多久。
+
+阈值写在 `local/config.toml`（写法见 `config.example.toml`）：
+
+```toml
+[rules.drawdown]
+warn = 0.20        # 比例写小数
+critical = 0.30
+
+[rules.idle_cash]
+enabled = false    # 关掉某条
+
+[targets]          # 目标配置；不写就不检查偏离
+equity = 0.6
+crypto = 0.2
+cash = 0.2
+```
+
+改完运行 `alerts --recheck` 立即按新阈值重算今天的提示；网页服务在启动时读配置，重启后才对网页上的修改生效。
 
 ## 配置与凭据
 

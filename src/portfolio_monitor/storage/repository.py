@@ -17,6 +17,7 @@ from portfolio_monitor.domain.models import (
     Position,
     UnresolvedSymbol,
 )
+from portfolio_monitor.domain.rules.base import Alert
 from portfolio_monitor.storage.db import transaction, utc_now
 
 
@@ -167,10 +168,10 @@ class Repository:
                 )
             self.conn.executemany(
                 "INSERT INTO positions (as_of, account_id, instrument_id, quantity, price,"
-                " market_value, cost_basis, currency, carried_forward, sync_run_id)"
-                " VALUES (?,?,?,?,?,?,?,?,?,?)",
+                " market_value, cost_basis, currency, carried_forward, sync_run_id, notional)"
+                " VALUES (?,?,?,?,?,?,?,?,?,?,?)",
                 [(day, p.account_id, p.instrument_id, p.quantity, p.price, p.market_value,
-                  p.cost_basis, p.currency, cf, sync_run_id) for p in positions],
+                  p.cost_basis, p.currency, cf, sync_run_id, p.notional) for p in positions],
             )
             self.conn.executemany(
                 "INSERT INTO cash_balances (as_of, account_id, currency, amount, carried_forward,"
@@ -195,7 +196,7 @@ class Repository:
         positions = [
             Position(account_id=r["account_id"], instrument_id=r["instrument_id"],
                      quantity=r["quantity"], price=r["price"], market_value=r["market_value"],
-                     cost_basis=r["cost_basis"], currency=r["currency"])
+                     cost_basis=r["cost_basis"], currency=r["currency"], notional=r["notional"])
             for r in self.conn.execute(
                 "SELECT * FROM positions WHERE account_id=? AND as_of=?", (account_id, prev)
             )
@@ -219,18 +220,18 @@ class Repository:
             "SELECT 'position' AS row_type, p.account_id, a.name AS account_name,"
             " a.kind AS account_kind, a.include_in_returns, p.instrument_id, i.name,"
             " i.asset_class, i.region, i.sector, p.currency, p.quantity, p.price,"
-            " p.market_value, p.cost_basis, p.carried_forward"
+            " p.market_value, p.cost_basis, p.carried_forward, p.notional"
             " FROM positions p JOIN accounts a ON a.id=p.account_id"
             " JOIN instruments i ON i.id=p.instrument_id WHERE p.as_of=?"
             " UNION ALL"
             " SELECT 'cash', c.account_id, a.name, a.kind, a.include_in_returns,"
             " 'CASH:' || c.currency, c.currency || ' 现金', 'cash', NULL, NULL, c.currency,"
-            " c.amount, 1.0, c.amount, c.amount, c.carried_forward"
+            " c.amount, 1.0, c.amount, c.amount, c.carried_forward, NULL"
             " FROM cash_balances c JOIN accounts a ON a.id=c.account_id WHERE c.as_of=?"
             " UNION ALL"
             " SELECT 'summary', h.account_id, a.name, a.kind, a.include_in_returns,"
             " 'ACCOUNT:' || h.account_id, a.name || ' 总值', 'other', NULL, NULL, h.currency,"
-            " NULL, NULL, h.value, NULL, 0"
+            " NULL, NULL, h.value, NULL, 0, NULL"
             " FROM account_history h JOIN accounts a ON a.id=h.account_id WHERE h.as_of=?"
             " AND NOT EXISTS (SELECT 1 FROM positions p WHERE p.as_of=h.as_of AND p.account_id=h.account_id)"
             " AND NOT EXISTS (SELECT 1 FROM cash_balances c WHERE c.as_of=h.as_of AND c.account_id=h.account_id)",
@@ -522,3 +523,72 @@ class Repository:
     def list_unresolved(self) -> list[dict[str, Any]]:
         rows = self.conn.execute("SELECT * FROM unresolved_symbols ORDER BY last_seen DESC")
         return [dict(r) for r in rows]
+
+    # ---------- 风险提示 ----------
+
+    def replace_alerts(self, as_of: date, alerts: Iterable[Alert]) -> None:
+        """覆盖该估值日的规则结果，并记下这天算过规则。"""
+        day = _d(as_of)
+        alerts = list(alerts)
+        with transaction(self.conn):
+            self.conn.execute("DELETE FROM alerts WHERE as_of=?", (day,))
+            self.conn.executemany(
+                "INSERT INTO alerts (as_of, rule_id, subject, subject_name, severity, message, value,"
+                " threshold) VALUES (?,?,?,?,?,?,?,?)",
+                [(day, a.rule_id, a.subject, a.subject_name, a.severity.value, a.message, a.value,
+                  a.threshold) for a in alerts],
+            )
+            self.conn.execute(
+                "INSERT INTO alert_runs (as_of, evaluated_at, n_alerts) VALUES (?,?,?)"
+                " ON CONFLICT(as_of) DO UPDATE SET evaluated_at=excluded.evaluated_at,"
+                " n_alerts=excluded.n_alerts",
+                (day, utc_now(), len(alerts)),
+            )
+
+    def alert_run(self, as_of: date) -> dict[str, Any] | None:
+        row = self.conn.execute("SELECT * FROM alert_runs WHERE as_of=?", (_d(as_of),)).fetchone()
+        return dict(row) if row else None
+
+    def previous_alert_run(self, as_of: date) -> str | None:
+        return self.conn.execute("SELECT MAX(as_of) FROM alert_runs WHERE as_of<?", (_d(as_of),)).fetchone()[0]
+
+    def alerts_on(self, as_of: date | str) -> list[dict[str, Any]]:
+        rows = self.conn.execute("SELECT * FROM alerts WHERE as_of=? ORDER BY rule_id, subject",
+                                 (as_of if isinstance(as_of, str) else _d(as_of),))
+        return [dict(r) for r in rows]
+
+    def alert_since(self, as_of: date, rule_id: str, subject: str) -> str:
+        """这条提示从哪个估值日起连续出现（只看算过规则的日子；as_of 当天应有这条提示）。"""
+        day = _d(as_of)
+        gap = self.conn.execute(
+            "SELECT MAX(r.as_of) FROM alert_runs r WHERE r.as_of<? AND NOT EXISTS ("
+            " SELECT 1 FROM alerts a WHERE a.as_of=r.as_of AND a.rule_id=? AND a.subject=?)",
+            (day, rule_id, subject),
+        ).fetchone()[0]
+        first = self.conn.execute(
+            "SELECT MIN(as_of) FROM alert_runs WHERE as_of<=? AND as_of>?", (day, gap or "")
+        ).fetchone()[0]
+        return first or day
+
+    def consecutive_failures(self, as_of: date, sources: Iterable[str]) -> dict[str, tuple[int, str | None]]:
+        """各数据源截至 as_of 连续失败的估值日数和最近一次的错误（每个估值日看最后一次运行）。"""
+        wanted = set(sources)
+        rows = self.conn.execute(
+            "SELECT source, as_of, status, error FROM sync_runs WHERE id IN ("
+            " SELECT MAX(id) FROM sync_runs WHERE as_of<=? AND status!='running' GROUP BY source, as_of)"
+            " ORDER BY source, as_of DESC",
+            (_d(as_of),),
+        )
+        out: dict[str, tuple[int, str | None]] = {}
+        stopped: set[str] = set()
+        for r in rows:
+            src = r["source"]
+            if src not in wanted or src in stopped:
+                continue
+            if r["status"] != "failed":
+                stopped.add(src)
+                out.setdefault(src, (0, None))
+                continue
+            n, err = out.get(src, (0, None))
+            out[src] = (n + 1, err if n else r["error"])
+        return out

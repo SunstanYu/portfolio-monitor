@@ -15,7 +15,9 @@ from pathlib import Path
 from portfolio_monitor.app import App, open_app, today_ny
 from portfolio_monitor.config import load_settings, parse_settings
 from portfolio_monitor.domain.models import AssetClass, Instrument
+from portfolio_monitor.domain.rules import Severity
 from portfolio_monitor.entry.formatting import FIELD_LABELS, label, money, pct
+from portfolio_monitor.services.risk import AlertsResult
 from portfolio_monitor.sources.base import SourceError
 from portfolio_monitor.sources.fx import StaticFx
 
@@ -71,7 +73,36 @@ def cmd_sync(app: App, args: argparse.Namespace) -> int:
     print(f"汇率：{report.fx_status}" + (f"  {report.fx_detail}" if report.fx_detail else ""))
     print(f"总资产 {money(report.nav_total)}  投资资产 {money(report.nav_investable)}"
           + ("  ⚠ 含沿用数据" if report.stale else ""))
+    if report.alerts_error:
+        print(f"⚠ 风险规则执行失败：{report.alerts_error}")
+    elif report.nav_total is not None:
+        print_alerts(app.risk.alerts(day))
     return 0 if report.ok else 1
+
+
+def print_alerts(result: AlertsResult) -> None:
+    if not result.alerts:
+        print(f"风险提示（{result.as_of}）：无")
+        return
+    print(f"风险提示（{result.as_of}）：严重 {result.critical}，提示 {result.warn}")
+    rows = [["严重" if a.severity == Severity.CRITICAL else "提示", a.rule_name, a.message,
+             "升级为严重" if a.escalated else "新出现" if a.new else f"自 {a.since} 起"]
+            for a in result.alerts]
+    print(table(["级别", "规则", "说明", "状态"], rows))
+
+
+def cmd_alerts(app: App, args: argparse.Namespace) -> int:
+    day = args.date or app.query.latest_date()
+    if day is None:
+        raise LookupError("还没有任何净值数据，请先运行同步")
+    if args.recheck:
+        app.risk.evaluate(day)  # 用当前配置重算，不重新拉数据源
+    result = app.risk.alerts(day)
+    if not result.evaluated:
+        print(f"{day} 还没有算过风险规则；加 --recheck 用当前配置计算")
+        return 0
+    print_alerts(result)
+    return 0
 
 
 def cmd_backfill(app: App, args: argparse.Namespace) -> int:
@@ -295,6 +326,9 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--by", choices=GROUP_FIELDS, default="instrument_id")
     p.add_argument("--account")
     p.add_argument("--limit", type=int, default=50)
+    p = sub.add_parser("alerts", help="风险提示（默认最新估值日）")
+    p.add_argument("--date", **date_arg)
+    p.add_argument("--recheck", action="store_true", help="用当前配置的阈值重算（不重新拉数据源），覆盖这天的结果")
     p = sub.add_parser("performance", help="收益率序列")
     p.add_argument("--last", type=int, default=20)
     p = sub.add_parser("serve", help="启动网页和 MCP（默认只监听本机；设置 MCP_TOKEN 后开放 /mcp）")
@@ -314,7 +348,7 @@ def _server_args(p: argparse.ArgumentParser) -> None:
 
 COMMANDS = {
     "migrate": cmd_migrate, "sync": cmd_sync, "backfill": cmd_backfill, "overview": cmd_overview,
-    "holdings": cmd_holdings, "performance": cmd_performance, "serve": cmd_serve,
+    "holdings": cmd_holdings, "performance": cmd_performance, "serve": cmd_serve, "alerts": cmd_alerts,
 }
 
 

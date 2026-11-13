@@ -36,6 +36,7 @@ def test_holdings(repo):
 
     swap = pos["UNKNOWN:okx:BTC-USDT-SWAP"]
     assert swap.quantity == 2 and swap.market_value == 150  # 市值 = 未实现盈亏
+    assert swap.notional == 13000  # 名义价值供杠杆规则用
     assert sum(p.market_value for p in snap.positions) == pytest.approx(57793.9)  # 总值不因合约重复
     assert not snap.cash and snap.data_date is None
 

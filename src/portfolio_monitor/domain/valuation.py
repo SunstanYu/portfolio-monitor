@@ -36,6 +36,7 @@ def value_rows(
         out = dict(r)
         out["market_value_usd"] = mv_usd
         out["cost_basis_usd"] = cost_usd
+        out["notional_usd"] = to_usd(r.get("notional"), ccy, usd_per_unit)
         out["unrealized_pnl_usd"] = (
             None if r["row_type"] == "cash" or cost_usd is None else mv_usd - cost_usd
         )

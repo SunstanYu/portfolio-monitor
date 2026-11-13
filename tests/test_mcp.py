@@ -22,7 +22,7 @@ CONFIG = {
 }
 TOKEN = "test-token-" + "0" * 32
 READ_TOOLS = {"get_overview", "get_accounts", "get_account", "get_holdings", "get_performance",
-              "get_change_log"}
+              "get_change_log", "get_risk_alerts"}
 PREVIEW_TOOLS = {"set_holding", "remove_holding", "set_cash_balance", "record_cash_flow"}
 
 
@@ -94,6 +94,14 @@ async def test_read_tools(client, app):
     assert sum(r["weight"] for r in by_ccy["rows"]) == pytest.approx(1.0)
     only_us = await call(client, "get_holdings", account_id="us")
     assert {r["instrument_id"] for r in only_us["rows"]} >= {"US:NVDA"}
+
+
+@pytest.mark.anyio
+async def test_risk_alerts(client, app):
+    r = await call(client, "get_risk_alerts")
+    assert r["evaluated"] and r["as_of"] == app.query.latest_date().isoformat()
+    assert r["critical"] + r["warn"] == len(r["alerts"])
+    assert all({"rule_id", "rule_name", "severity", "message", "since", "new"} <= set(a) for a in r["alerts"])
 
 
 @pytest.mark.anyio

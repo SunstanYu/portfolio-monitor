@@ -95,6 +95,20 @@ main { max-width: 1200px; margin: 0 auto; padding: 16px; display: grid; gap: 16p
 .flash-saved { background: var(--ok-wash); }
 .flash-undone { background: var(--surface); border: 1px solid var(--border); }
 
+/* 风险提示 */
+.risk-list { list-style: none; margin: 0; padding: 0; }
+.risk-item { display: grid; grid-template-columns: auto 7.5em minmax(0, 1fr) auto; gap: 4px 12px; align-items: baseline; font-size: 13.5px; padding: 8px 0; border-top: 1px solid var(--border); }
+.risk-item:first-child { border-top: 0; padding-top: 0; }
+.risk-level { font-size: 12px; padding: 1px 8px; border-radius: 999px; white-space: nowrap; }
+.risk-critical { background: var(--bad-wash); color: var(--bad-ink); }
+.risk-warn { background: var(--warn-wash); color: var(--warn-ink); }
+.risk-rule { color: var(--ink-2); }
+.risk-since { color: var(--muted); font-size: 12px; white-space: nowrap; }
+@media (max-width: 600px) {
+  .risk-item { grid-template-columns: auto minmax(0, 1fr); }
+  .risk-msg { grid-column: 1 / -1; }
+}
+
 /* 账户页 */
 .account-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; }
 .badges { margin: 0; display: flex; flex-wrap: wrap; gap: 6px; }

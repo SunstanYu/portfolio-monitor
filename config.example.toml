@@ -59,6 +59,37 @@ include_in_returns = false
 # flow_lookback_days = 30       # 每次同步回看几天的充提记录
 # reconcile_tolerance = 0.01    # 与 OKX 资产估值对账允许的偏差
 
+# 风险规则：比例写小数（0.20 即 20%）；没写的用默认值，enabled = false 关闭
+# [rules.instrument_concentration]   # 单一标的占投资资产（现金、稳定币不算）
+# warn = 0.20
+# critical = 0.35
+# exempt = ["US:VOO"]                # 不检查的标的
+# [rules.account_concentration]      # 单一账户占总资产
+# warn = 0.60
+# critical = 0.80
+# [rules.allocation_drift]           # 偏离目标配置（百分点）
+# warn = 0.05
+# [rules.idle_cash]                  # 现金（含稳定币）占总资产
+# warn = 0.30
+# [rules.leverage]                   # 合约名义价值 + 融资，占投资资产（可超过 1）
+# warn = 0.50
+# critical = 1.00
+# [rules.drawdown]                   # 从高点回撤
+# warn = 0.20
+# critical = 0.30
+# [rules.daily_drop]                 # 单日跌幅
+# warn = 0.05
+# [rules.source_failures]            # 数据源连续失败天数
+# warn = 2
+# critical = 5
+# [rules.data_jump]                  # 单日变化过大，疑似数据错误
+# warn = 0.15
+#
+# [targets]                          # 目标配置，加起来为 1；不写就不检查偏离
+# equity = 0.60
+# crypto = 0.20
+# cash = 0.20
+
 [sources.fake]
 start = "2025-01-01"
 monthly_deposit = 2000

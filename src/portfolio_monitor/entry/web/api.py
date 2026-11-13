@@ -53,6 +53,11 @@ async def holdings(request: Request, group_by: str = "instrument_id",
     return _ok(_app(request).query.holdings(date, group_by=[group_by], filters=filters))
 
 
+@router.get("/alerts")
+async def alerts(request: Request, date: dt.date | None = None):
+    return _ok(_app(request).risk.alerts(date))
+
+
 @router.get("/curve")
 async def curve(request: Request, range: str = "all", date: dt.date | None = None):
     return _ok(_app(request).query.curve(range, date))
