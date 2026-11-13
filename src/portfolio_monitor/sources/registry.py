@@ -9,13 +9,18 @@ from portfolio_monitor.sources.fake import FakeSource
 from portfolio_monitor.sources.ibkr import IbkrSource
 from portfolio_monitor.sources.manual import ManualSource
 from portfolio_monitor.sources.okx import OkxSource
+from portfolio_monitor.sources.usmart import UsmartSource
 
 REGISTRY: dict[str, Callable[[SourceContext], Source]] = {
     "manual": ManualSource,
     "fake": FakeSource,
     "ibkr": IbkrSource,
     "okx": OkxSource,
+    "usmart": UsmartSource,
 }
+
+# 接口拿不到资金流水的数据源：允许在网页 / MCP 手动记入金出金（只记流水，不改现金）
+MANUAL_FLOW_SOURCES = {"usmart"}
 
 
 def build_source(name: str, ctx: SourceContext) -> Source:

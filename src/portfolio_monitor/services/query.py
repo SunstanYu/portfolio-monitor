@@ -12,6 +12,7 @@ from pydantic import BaseModel
 from portfolio_monitor.domain import valuation
 from portfolio_monitor.domain.aggregate import DEFAULT_SUM_FIELDS, aggregate
 from portfolio_monitor.domain.returns import Flow, NavPoint, PerfPoint, max_drawdown, period_return, twr_series
+from portfolio_monitor.sources.registry import MANUAL_FLOW_SOURCES
 from portfolio_monitor.storage.repository import Repository
 
 _INSTRUMENT_FIELDS = ("name", "asset_class", "region", "sector", "currency")
@@ -89,6 +90,7 @@ class AccountSummary(BaseModel):
     currency: str
     include_in_returns: bool
     editable: bool  # 手动账户可在网页 / MCP 修改
+    flows_editable: bool  # 可以手动记入金出金（手动账户，以及接口拿不到资金流水的数据源）
     value_usd: float
     weight: float
     stale: bool     # 今天的数据是沿用上次的
@@ -223,7 +225,8 @@ class QueryService:
             out.append(AccountSummary(
                 id=a.id, name=a.name, institution=a.institution, kind=a.kind.value, source=a.source,
                 currency=a.currency, include_in_returns=a.include_in_returns,
-                editable=a.source == "manual", value_usd=value,
+                editable=a.source == "manual", flows_editable=a.source in MANUAL_FLOW_SOURCES | {"manual"},
+                value_usd=value,
                 weight=value / total if total else 0.0,
                 stale=any(r["carried_forward"] for r in mine),
             ))

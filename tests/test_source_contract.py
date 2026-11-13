@@ -13,6 +13,9 @@ from collections.abc import Callable
 import pytest
 from flex_mock import FlexMock
 from okx_mock import OkxMock
+from usmart_mock import NOW as USMART_NOW
+from usmart_mock import UsmartMock
+from usmart_mock import env as usmart_env
 
 from portfolio_monitor.domain.instruments import is_canonical
 from portfolio_monitor.domain.models import Account, AssetClass, Instrument
@@ -21,6 +24,7 @@ from portfolio_monitor.sources.fake import FakeSource
 from portfolio_monitor.sources.ibkr import IbkrSource
 from portfolio_monitor.sources.manual import ManualSource
 from portfolio_monitor.sources.okx import OkxSource
+from portfolio_monitor.sources.usmart import UsmartSource
 from portfolio_monitor.sources.registry import REGISTRY
 from portfolio_monitor.storage.repository import Repository
 
@@ -63,11 +67,20 @@ def _okx(repo: Repository) -> tuple[Source, list[Account]]:
     return OkxSource(SourceContext(repo=repo), client=OkxMock().client()), accounts
 
 
+def _usmart(repo: Repository) -> tuple[Source, list[Account]]:
+    accounts = [Account(id="u-main", name="U1", kind="broker", source="usmart", currency="USD")]
+    repo.sync_accounts(accounts)
+    src = UsmartSource(SourceContext(repo=repo, env=usmart_env()), client=UsmartMock().client(),
+                       now=lambda: USMART_NOW)
+    return src, accounts
+
+
 CASES: dict[str, Callable[[Repository], tuple[Source, list[Account]]]] = {
     "fake": _fake,
     "manual": _manual,
     "ibkr": _ibkr,
     "okx": _okx,
+    "usmart": _usmart,
 }
 
 

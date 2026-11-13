@@ -59,6 +59,18 @@ include_in_returns = false
 # flow_lookback_days = 30       # 每次同步回看几天的充提记录
 # reconcile_tolerance = 0.01    # 与 OKX 资产估值对账允许的偏差
 
+# 盈立新加坡（官方 Open API）：凭据放在 .env（USMART_*）；入金出金在网页 / MCP 手动记
+# [[accounts]]
+# id = "usmart"
+# name = "盈立新加坡"
+# kind = "broker"
+# source = "usmart"
+# currency = "USD"
+#
+# [sources.usmart]
+# host = "https://open-jy.usmartsg.com"
+# reconcile_tolerance = 0.01    # 自己算的持仓市值与盈立的持仓市值对账允许的偏差
+
 # 风险规则：比例写小数（0.20 即 20%）；没写的用默认值，enabled = false 关闭
 # [rules.instrument_concentration]   # 单一标的占投资资产（现金、稳定币不算）
 # warn = 0.20

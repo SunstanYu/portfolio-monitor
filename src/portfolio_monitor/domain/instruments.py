@@ -3,13 +3,14 @@
     US:NVDA   US:BRK.B
     HK:00700  港股补足 5 位
     CN:600519 A 股 6 位，不区分沪深（代码本身不重复）
+    SG:D05    新加坡交易所，字母数字 2–5 位
     CRYPTO:BTC
 
 各数据源在接入层调用 normalize() 把自己的写法转成统一编号；
 识别不了的用 unknown_id() 生成 UNKNOWN:<数据源>:<原始写法>，计入资产但登记为待处理。
 
 无市场提示时的推断规则（有提示时以提示为准）：
-    带 .HK 后缀 → HK；带 .SS / .SH / .SZ / .BJ 后缀 → CN
+    带 .HK 后缀 → HK；带 .SS / .SH / .SZ / .BJ 后缀 → CN；带 .SI 后缀 → SG
     纯数字 1–5 位 → HK；6 位 → CN
     字母代码 → US（加密货币必须由数据源给出 CRYPTO 提示）
 """
@@ -18,13 +19,14 @@ from __future__ import annotations
 
 import re
 
-MARKETS = ("US", "HK", "CN", "CRYPTO")
-MARKET_CURRENCY = {"US": "USD", "HK": "HKD", "CN": "CNY", "CRYPTO": "USD"}
+MARKETS = ("US", "HK", "CN", "SG", "CRYPTO")
+MARKET_CURRENCY = {"US": "USD", "HK": "HKD", "CN": "CNY", "SG": "SGD", "CRYPTO": "USD"}
 UNKNOWN = "UNKNOWN"
 CASH = "CASH"
 
 _US_CODE = re.compile(r"^[A-Z]{1,5}(\.[A-Z]{1,2})?$")
 _CRYPTO_CODE = re.compile(r"^[A-Z0-9]{2,10}$")
+_SG_CODE = re.compile(r"^[A-Z0-9]{2,5}$")
 _CN_SUFFIXES = (".SS", ".SH", ".SZ", ".BJ")
 
 
@@ -41,6 +43,8 @@ def normalize(raw: str, market: str | None = None) -> str:
         return _canonical(prefix, code, raw)
     if text.endswith(".HK"):
         return _canonical("HK", text[:-3], raw)
+    if text.endswith(".SI"):
+        return _canonical("SG", text[:-3], raw)
     for suffix in _CN_SUFFIXES:
         if text.endswith(suffix):
             return _canonical("CN", text[: -len(suffix)], raw)
@@ -66,6 +70,10 @@ def _canonical(market: str, code: str, raw: str) -> str:
         if not _US_CODE.match(code):
             raise UnresolvedInstrument(raw)
         return f"US:{code}"
+    if market == "SG":
+        if not _SG_CODE.match(code):
+            raise UnresolvedInstrument(raw)
+        return f"SG:{code}"
     if market == "CRYPTO":
         if not _CRYPTO_CODE.match(code):
             raise UnresolvedInstrument(raw)
@@ -111,6 +119,8 @@ def to_yahoo(instrument_id: str) -> str | None:
         if code[0] in "48":
             return f"{code}.BJ"
         return None
+    if market == "SG":
+        return f"{code}.SI"
     if market == "CRYPTO":
         return f"{code}-USD"
     return None
