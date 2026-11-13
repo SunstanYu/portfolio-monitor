@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- 虚构的 IBKR Flex 报表（账户号、个人信息、金额全部为编造），结构与真实报表一致 -->
+<FlexQueryResponse queryName="pm" type="AF">
+<FlexStatements count="1">
+<FlexStatement accountId="U0000001" fromDate="20260223" toDate="20260302" period="LastNCalendarDays" whenGenerated="20260303;061500">
+<AccountInformation accountId="U0000001" acctAlias="" currency="USD" name="测试 用户" dateOfBirth="19000101" primaryEmail="nobody@example.com" street="1 Example Road" />
+<EquitySummaryInBase>
+<EquitySummaryByReportDateInBase accountId="U0000001" acctAlias="" currency="USD" reportDate="20260223" cash="1000" stock="98000" total="99000" />
+<EquitySummaryByReportDateInBase accountId="U0000001" acctAlias="" currency="USD" reportDate="20260224" cash="1000" stock="99000" total="100000" />
+<EquitySummaryByReportDateInBase accountId="U0000001" acctAlias="" currency="USD" reportDate="20260225" cash="6000" stock="99500" total="105500" />
+<EquitySummaryByReportDateInBase accountId="U0000001" acctAlias="" currency="USD" reportDate="20260226" cash="6000" stock="101500" total="107500" />
+<EquitySummaryByReportDateInBase accountId="U0000001" acctAlias="" currency="USD" reportDate="20260227" cash="5000" stock="101000" total="106000" />
+<EquitySummaryByReportDateInBase accountId="U0000001" acctAlias="" currency="USD" reportDate="20260302" cash="4300" stock="102700" total="107000" />
+</EquitySummaryInBase>
+<CashReport>
+<CashReportCurrency accountId="U0000001" currency="BASE_SUMMARY" levelOfDetail="BaseCurrency" fromDate="20260223" toDate="20260302" startingCash="1000" endingCash="4282.05" />
+<CashReportCurrency accountId="U0000001" currency="USD" levelOfDetail="Currency" fromDate="20260223" toDate="20260302" startingCash="1000" endingCash="3000" />
+<CashReportCurrency accountId="U0000001" currency="HKD" levelOfDetail="Currency" fromDate="20260223" toDate="20260302" startingCash="0" endingCash="10000" />
+</CashReport>
+<OpenPositions>
+<OpenPosition accountId="U0000001" currency="USD" assetCategory="STK" subCategory="COMMON" symbol="NVDA" description="NVIDIA CORP" conid="100001" listingExchange="NASDAQ" reportDate="20260302" position="50" multiplier="1" markPrice="120" positionValue="6000" costBasisPrice="90" costBasisMoney="4500" side="Long" levelOfDetail="SUMMARY" />
+<OpenPosition accountId="U0000001" currency="USD" assetCategory="STK" subCategory="COMMON" symbol="NVDA" description="NVIDIA CORP" conid="100001" listingExchange="NASDAQ" reportDate="20260302" position="50" multiplier="1" markPrice="120" positionValue="6000" costBasisPrice="90" costBasisMoney="4500" side="Long" levelOfDetail="LOT" />
+<OpenPosition accountId="U0000001" currency="USD" assetCategory="STK" subCategory="ETF" symbol="VOO" description="VANGUARD S&amp;P 500 ETF" conid="100002" listingExchange="ARCA" reportDate="20260302" position="10" multiplier="1" markPrice="500" positionValue="5000" costBasisPrice="480" costBasisMoney="4800" side="Long" levelOfDetail="SUMMARY" />
+<OpenPosition accountId="U0000001" currency="USD" assetCategory="STK" subCategory="COMMON" symbol="BRK B" description="BERKSHIRE HATHAWAY INC-CL B" conid="100003" listingExchange="NYSE" reportDate="20260302" position="2" multiplier="1" markPrice="450" positionValue="900" costBasisPrice="400" costBasisMoney="800" side="Long" levelOfDetail="SUMMARY" />
+<OpenPosition accountId="U0000001" currency="HKD" assetCategory="STK" subCategory="COMMON" symbol="700" description="TENCENT HOLDINGS LTD" conid="100004" listingExchange="SEHK" reportDate="20260302" position="200" multiplier="1" markPrice="400" positionValue="80000" costBasisPrice="350" costBasisMoney="70000" side="Long" levelOfDetail="SUMMARY" />
+<OpenPosition accountId="U0000001" currency="CNH" assetCategory="STK" subCategory="COMMON" symbol="600519" description="KWEICHOW MOUTAI CO LTD-A" conid="100005" listingExchange="SEHKNTL" reportDate="20260302" position="10" multiplier="1" markPrice="1500" positionValue="15000" costBasisPrice="1400" costBasisMoney="14000" side="Long" levelOfDetail="SUMMARY" />
+<OpenPosition accountId="U0000001" currency="USD" assetCategory="OPT" subCategory="C" symbol="AAPL  260320C00200000" description="AAPL 20MAR26 200 C" conid="900001" listingExchange="CBOE" reportDate="20260302" position="1" multiplier="100" markPrice="5" positionValue="500" costBasisPrice="3" costBasisMoney="300" side="Long" levelOfDetail="SUMMARY" />
+</OpenPositions>
+<CashTransactions>
+<CashTransaction accountId="U0000001" currency="USD" assetCategory="" symbol="" description="ELECTRONIC FUND TRANSFER" dateTime="20260225" settleDate="20260225" amount="5000" type="Deposits/Withdrawals" transactionID="7001" reportDate="20260226" levelOfDetail="DETAIL" />
+<CashTransaction accountId="U0000001" currency="USD" assetCategory="" symbol="" description="DISBURSEMENT INITIATED BY TEST USER" dateTime="20260227;133000" settleDate="20260227" amount="-1000" type="Deposits/Withdrawals" transactionID="7002" reportDate="20260227" levelOfDetail="DETAIL" />
+<CashTransaction accountId="U0000001" currency="USD" assetCategory="" symbol="" description="DEPOSITS/WITHDRAWALS TOTAL" dateTime="20260227" amount="4000" type="Deposits/Withdrawals" transactionID="" reportDate="20260227" levelOfDetail="SUMMARY" />
+<CashTransaction accountId="U0000001" currency="USD" assetCategory="STK" symbol="VOO" description="VOO CASH DIVIDEND" dateTime="20260226" amount="12.5" type="Dividends" transactionID="7003" reportDate="20260226" levelOfDetail="DETAIL" />
+<CashTransaction accountId="U0000001" currency="USD" assetCategory="STK" symbol="VOO" description="VOO US TAX" dateTime="20260226" amount="-3.75" type="Withholding Tax" transactionID="7004" reportDate="20260226" levelOfDetail="DETAIL" />
+<CashTransaction accountId="U0000001" currency="USD" assetCategory="" symbol="" description="USD CREDIT INT" dateTime="20260302" amount="1.2" type="Broker Interest Received" transactionID="7005" reportDate="20260302" levelOfDetail="DETAIL" />
+</CashTransactions>
+<Transfers>
+<Transfer accountId="U0000001" currency="USD" assetCategory="STK" symbol="MSFT" description="MICROSOFT CORP" date="20260226" type="ACATS" direction="IN" quantity="5" transferPrice="400" positionAmount="2000" positionAmountInBase="2000" transactionID="7101" reportDate="20260226" />
+<Transfer accountId="U0000001" currency="HKD" assetCategory="CASH" symbol="HKD" description="INTERNAL TRANSFER" date="20260228" type="INTERNAL" direction="OUT" quantity="0" transferPrice="0" positionAmount="3000" positionAmountInBase="384.6" transactionID="7102" reportDate="20260228" />
+</Transfers>
+</FlexStatement>
+</FlexStatements>
+</FlexQueryResponse>

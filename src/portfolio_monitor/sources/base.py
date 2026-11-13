@@ -9,10 +9,10 @@ from __future__ import annotations
 import datetime as dt
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 from portfolio_monitor.domain.instruments import is_canonical
-from portfolio_monitor.domain.models import Account, SourceSnapshot
+from portfolio_monitor.domain.models import Account, SourceHistory, SourceSnapshot
 
 if TYPE_CHECKING:
     from portfolio_monitor.storage.repository import Repository
@@ -43,6 +43,34 @@ class Source(Protocol):
         ...
 
 
+@runtime_checkable
+class HistorySource(Source, Protocol):
+    """能回填历史的数据源（可选能力）：每日账户总值 + 资金进出。"""
+
+    def history(self, start: dt.date, end: dt.date, accounts: Sequence[Account]) -> SourceHistory:
+        """返回 [start, end] 内能拿到的历史；实际区间可能比请求的短（如 end 当天还没有数据）。"""
+        ...
+
+
+def validate_history(hist: SourceHistory, source: str, accounts: Sequence[Account]) -> None:
+    problems: list[str] = []
+    if hist.source != source:
+        problems.append(f"source 应为 {source}，实际为 {hist.source}")
+    allowed = {a.id for a in accounts}
+    used = {v.account_id for v in hist.values} | {f.account_id for f in hist.flows}
+    if stray := sorted(used - allowed):
+        problems.append(f"包含不属于本数据源的账户：{stray}")
+    if outside := [v for v in hist.values if not hist.start <= v.date <= hist.end]:
+        problems.append(f"有 {len(outside)} 条历史总值不在 {hist.start} ~ {hist.end} 内")
+    seen: set[tuple[dt.date, str]] = set()
+    for v in hist.values:
+        if (v.date, v.account_id) in seen:
+            problems.append(f"历史总值重复：{v.date} {v.account_id}")
+        seen.add((v.date, v.account_id))
+    if problems:
+        raise SnapshotInvalid(source, problems)
+
+
 def validate_snapshot(
     snap: SourceSnapshot, source: str, as_of: dt.date, accounts: Sequence[Account]
 ) -> None:
@@ -51,6 +79,8 @@ def validate_snapshot(
         problems.append(f"source 应为 {source}，实际为 {snap.source}")
     if snap.as_of != as_of:
         problems.append(f"as_of 应为 {as_of}，实际为 {snap.as_of}")
+    if snap.data_date is not None and snap.data_date > as_of:
+        problems.append(f"数据日期 {snap.data_date} 晚于估值日 {as_of}")
 
     allowed = {a.id for a in accounts}
     used = (

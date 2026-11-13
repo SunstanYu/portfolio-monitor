@@ -6,11 +6,13 @@ from collections.abc import Callable
 
 from portfolio_monitor.sources.base import Source, SourceContext
 from portfolio_monitor.sources.fake import FakeSource
+from portfolio_monitor.sources.ibkr import IbkrSource
 from portfolio_monitor.sources.manual import ManualSource
 
 REGISTRY: dict[str, Callable[[SourceContext], Source]] = {
     "manual": ManualSource,
     "fake": FakeSource,
+    "ibkr": IbkrSource,
 }
 
 

@@ -16,7 +16,8 @@ uv run portfolio-monitor demo --days 180 --serve
 ## 命令
 
 ```bash
-uv run portfolio-monitor sync [--date YYYY-MM-DD]       # 每日同步；有失败时退出码为 1
+uv run portfolio-monitor sync [--date YYYY-MM-DD] [--source ibkr]   # 每日同步；有失败时退出码为 1
+uv run portfolio-monitor backfill ibkr [--days 365]     # 回填历史净值和资金进出（IBKR 最多一年）
 uv run portfolio-monitor overview [--date ...]          # 概览：总资产、收益、回撤、资产分配
 uv run portfolio-monitor holdings --by asset_class      # 持仓：instrument_id / account_id / asset_class / currency / region / sector
 uv run portfolio-monitor performance --last 20          # TWR 收益率序列
@@ -46,6 +47,22 @@ JSON 接口在 `/api/v1/...`（概览、持仓、曲线、月度收益、表格�
 ```bash
 claude mcp add --transport http portfolio http://127.0.0.1:8000/mcp --header "Authorization: Bearer $MCP_TOKEN"
 ```
+
+## IBKR
+
+用 Flex Web Service 只读取数（Client Portal → Performance & Reports → Flex Queries）：
+
+1. 新建 Activity Flex Query，勾选 Open Positions、Cash Report、Cash Transactions、Transfers、Net Asset Value (NAV) in Base；Account Information 不需要（含个人信息）
+2. 开启 Flex Web Service，生成 token；把 token 和 Query ID 写进 `.env`（`IBKR_FLEX_TOKEN`、`IBKR_FLEX_QUERY_ID`）
+3. `local/config.toml` 里加一个 `source = "ibkr"` 的账户（写法见 `config.example.toml`）
+4. 先回填一年，再每日同步：
+
+```bash
+uv run --env-file .env portfolio-monitor backfill ibkr
+uv run --env-file .env portfolio-monitor sync
+```
+
+IBKR 当天的报表次日才能取到：当天同步时自动退到最近一个有数据的交易日，并标记为沿用；次日早上可以只给 IBKR 补跑前一天（`sync --date <前一日> --source ibkr`）。
 
 ## 配置与凭据
 

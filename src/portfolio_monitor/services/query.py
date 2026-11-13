@@ -143,18 +143,38 @@ class QueryService:
         ]
 
     def performance(self, end: dt.date | None = None) -> list[PerfPoint]:
-        """只含计入收益率的账户；资金进出按流水日期的汇率换算。"""
+        """只含计入收益率的账户；资金进出按流水日期的汇率换算。
+
+        比净值序列起点晚加入的账户（如 IBKR 回填了一年、其他账户从首次同步才有数据）：
+        加入当天的市值视为转入，不算收益；加入当天及之前的资金进出已包含在这笔市值里，不再计入。
+        """
         navs = [
             NavPoint(dt.date.fromisoformat(r["as_of"]), r["nav_usd"])
             for r in self.repo.nav_series("investable", end=end)
         ]
-        ids = [a.id for a in self.repo.list_accounts(active_only=False) if a.include_in_returns]
+        if not navs:
+            return []
+        series_start = navs[0].date
         flows = []
-        for f in self.repo.cash_flows(account_ids=ids, until=end):
-            rate = self.repo.fx_nearest(f.date, f.currency)
-            if rate is None:
-                raise valuation.MissingFxRate([f.currency])
-            flows.append(Flow(f.date, f.amount * rate[1]))
+        for account in self.repo.list_accounts(active_only=False):
+            if not account.include_in_returns:
+                continue
+            first = self.repo.first_value_date(account.id)
+            joined = dt.date.fromisoformat(first) if first else None
+            if joined is None or (end is not None and joined > end):
+                continue
+            late = joined > series_start
+            for f in self.repo.cash_flows(account_ids=[account.id], until=end):
+                if late and f.date <= joined:
+                    continue
+                rate = self.repo.fx_nearest(f.date, f.currency)
+                if rate is None:
+                    raise valuation.MissingFxRate([f.currency])
+                flows.append(Flow(f.date, f.amount * rate[1]))
+            if late:
+                value = sum(r["market_value_usd"] for r in self.valued_rows(joined)
+                            if r["account_id"] == account.id)
+                flows.append(Flow(joined, value))
         return twr_series(navs, flows)
 
     def curve(self, range_key: str = "all", end: dt.date | None = None) -> Curve:

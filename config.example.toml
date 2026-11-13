@@ -33,6 +33,19 @@ source = "manual"
 currency = "HKD"
 include_in_returns = false
 
+# IBKR（Flex Web Service）：token 和 Query ID 放在 .env（IBKR_FLEX_TOKEN、IBKR_FLEX_QUERY_ID）
+# [[accounts]]
+# id = "ibkr"
+# name = "IBKR"
+# kind = "broker"
+# source = "ibkr"
+# currency = "USD"             # 账户基础货币
+#
+# [sources.ibkr]
+# accounts = { "U1234567" = "ibkr" }   # Flex 账户号 → 上面的账户 id；只有一个 IBKR 账户时可省略
+# flow_lookback_days = 7               # 每日同步回看几天的资金进出
+# max_lag_days = 4                     # 当天没有报表时最多往前退几天
+
 [sources.fake]
 start = "2025-01-01"
 monthly_deposit = 2000
