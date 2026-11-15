@@ -35,6 +35,7 @@ uv run portfolio-monitor serve [--host 127.0.0.1 --port 8000]   # 启动网页�
 |---|---|
 | `/` | 总资产与收益、收益率和回撤曲线、资产分配、账户、月度收益 |
 | `/accounts/<id>` | 持仓、现金、资金进出；手动账户可新增 / 修改 / 删除持仓、改现金、记入金出金（持仓价格每日自动从 Yahoo 更新，取不到时用手填价格） |
+| `/reports` | Hermes 写的历史日报（仪表盘显示当天的） |
 | `/changes` | 修改记录，可撤销 |
 | `/sync` | 各数据源每次同步的结果 |
 
@@ -49,6 +50,8 @@ JSON 接口在 `/api/v1/...`（概览、持仓、曲线、月度收益、表格�
 ```bash
 claude mcp add --transport http portfolio http://127.0.0.1:8000/mcp --header "Authorization: Bearer $MCP_TOKEN"
 ```
+
+日报：Hermes 每个交易日次日早上调用 `get_daily_summary` 拿数据，写好后 `save_daily_report` 保存并推送到 Telegram；网页仪表盘和 `/reports` 同步显示。
 
 ## IBKR
 

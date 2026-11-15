@@ -137,7 +137,8 @@ def create_app(pm: App, *, mcp_token: str | None = None) -> FastAPI:
         overview = pm.query.overview()
         failed = [s for s in overview.sources if s.status != "ok"]
         return render(request, "dashboard.html", page="dashboard", o=overview, failed=failed,
-                      risk=pm.risk.alerts(overview.as_of), ranges=RANGES, asset_labels=ASSET_CLASS_LABELS)
+                      risk=pm.risk.alerts(overview.as_of), report=pm.reports.get(overview.as_of),
+                      ranges=RANGES, asset_labels=ASSET_CLASS_LABELS)
 
     @web.get("/accounts/{account_id}", response_class=HTMLResponse)
     async def account(request: Request, account_id: str, change: int | None = None,
@@ -158,6 +159,10 @@ def create_app(pm: App, *, mcp_token: str | None = None) -> FastAPI:
     @web.get("/changes", response_class=HTMLResponse)
     async def changes(request: Request, change: int | None = None, undone: int | None = None):
         return render(request, "changes.html", page="changes", flash=_flash(change, undone))
+
+    @web.get("/reports", response_class=HTMLResponse)
+    async def reports(request: Request):
+        return render(request, "reports.html", page="reports", reports=pm.reports.recent(60))
 
     @web.get("/sync", response_class=HTMLResponse)
     async def sync(request: Request):

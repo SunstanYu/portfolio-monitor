@@ -42,7 +42,7 @@
 | `daily_nav` | 每日组合净值、净入金、日收益、TWR 指数 |
 | `sync_runs` | 每次同步：数据源、状态、耗时、错误、原始返回存档路径 |
 | `change_log` | 手动账户的所有修改：时间、来源（web / api / mcp / cli）、改前、改后、状态（待确认 / 已生效 / 已撤销 / 已放弃）；JSON 接口和 MCP 的待确认修改也存在这里，30 分钟后作废 |
-| `daily_reports` | Hermes 写好的日报正文（网页同步展示） |
+| `daily_reports` | Hermes 写好的日报正文（网页同步展示），每个估值日一篇，重复保存覆盖 |
 
 - 存储：SQLite 单文件 `data/portfolio.sqlite`
 - 原始返回：每次同步的原始 JSON / XML 存档到 `data/raw/<日期>/<数据源>`，便于排查
@@ -191,7 +191,7 @@ class Rule(Protocol):
 
 网页本身不做登录，由 Cloudflare Access 把关。写入请求必须来自本站（检查 `Sec-Fetch-Site` / `Origin`），防止别的网站借登录状态提交修改。
 
-M3 已实现上表除以下几项外的全部内容：叠加基准（需要行情数据，M5 之后）、今日日报（M8）；风险提示在 M6 实现。资产分配用按大小排序的横向条形图（比饼图更容易比较相近的占比），与旁边的表格共用同一份数据。
+M3 已实现上表除叠加基准（需要行情数据）外的全部内容；风险提示在 M6、日报在 M8 实现（仪表盘显示当天日报，`/reports` 看历史）。资产分配用按大小排序的横向条形图（比饼图更容易比较相近的占比），与旁边的表格共用同一份数据。
 
 手动账户的修改（网页、JSON 接口、MCP 共用 `services/edit.py`）：
 
@@ -254,8 +254,9 @@ HOLDINGS = TableSpec(
 | `get_holdings`：合并持仓，可分组、按账户筛选 | `confirm_change`：确认并执行待确认的修改 |
 | `get_performance`：区间收益、最大回撤、月度收益；逐日数据按需返回 | `discard_change`：放弃待确认的修改 |
 | `get_change_log`：修改记录 | `undo_change`：撤销一次已生效的修改 |
-| `get_risk_alerts`：风险提示，含级别、当前值、阈值、是否新出现 / 升级 | `save_daily_report`：保存 Hermes 写好的日报（M8） |
-| `get_daily_summary`：日报所需的结构化数据（M8） | |
+| `get_risk_alerts`：风险提示，含级别、当前值、阈值、是否新出现 / 升级 | `save_daily_report`：保存 Hermes 写好的日报（同一天覆盖） |
+| `get_daily_summary`：日报所需的结构化数据：收益、当日盈亏、账户变动、市值变动最大的持仓、分配、风险提示、资金进出、数据状态 | |
+| `get_daily_report`：读取已保存的日报 | |
 
 - **两步写入**：写入类工具只返回"改前 → 改后"预览和 `change_id`（来源记为 mcp）；调用 `confirm_change(change_id)` 后才落库。撤销与网页一致，一步完成；服务端的说明（instructions）要求模型确认和撤销前都先征得用户同意
 - **鉴权**：`Authorization: Bearer <MCP_TOKEN>`，至少 32 个字符；未设置时不开放 `/mcp`。不用 SDK 的 OAuth 资源服务器，那套需要另有授权服务器，单用户静态 token 用不上
@@ -287,7 +288,8 @@ HOLDINGS = TableSpec(
 
 - `~/.hermes/config.yaml` 的 `mcp_servers` 加入 `http://127.0.0.1:8000/mcp`，带 `Authorization: Bearer <MCP_TOKEN>`
 - Telegram 网关只允许你的用户 ID
-- 定时任务：每个交易日美东 17:45 调用 `get_daily_summary` → 写中文日报 → `save_daily_report` → 推送 Telegram
+- 定时任务：交易日次日美东 08:00（周二至周六，IBKR 07:30 补跑之后，数据完整）调用 `get_daily_summary` → 按技能 `portfolio-daily-report` 写中文日报 → `save_daily_report` → 推送 Telegram
+- MCP 服务在 `config.yaml` 的 `mcp_servers.portfolio`，token 放在 `~/.hermes/.env`（`${PORTFOLIO_MCP_TOKEN}` 引用），只放行本项目的工具
 - 写入类操作一律先发预览，你在 Telegram 回复确认后再调用 `confirm_change`
 
 ## 11. 安全清单
@@ -317,7 +319,6 @@ HOLDINGS = TableSpec(
 ## 13. 待你确认
 
 - 目标资产配置（股票 / 债券 / 现金 / 加密的比例）；第 5 节阈值已按试算定了默认值，可在配置里改
-- 日报时间（默认美东 17:45，交易日）。实测美东 17:11 还取不到 IBKR 当天的报表，17:45 的同步里 IBKR 会是前一交易日的数据并标记沿用；可选：次日早上只给 IBKR 补跑前一估值日（`sync --date <前一日> --source ibkr`，其他账户不动），或把日报改到次日早上
 - 盈立新加坡资金流水接口在新加坡服务器上的正确地址（文档写的地址返回 450404，需问盈立 API 客服）
 
 ## 14. 决策记录
@@ -364,6 +365,9 @@ HOLDINGS = TableSpec(
 | 自动价格只写进快照，不改手填价格 | 修改记录和撤销只针对用户的操作；行情取不到时有可退回的价格 |
 | 行情报价按估值日缓存 30 分钟 | 网页上每次修改都会刷新手动账户快照，不必每次都去 Yahoo 取价 |
 | 测试和演示默认关掉自动价格 | 不访问网络，结果可重复；需要时注入假的行情 |
+| 日报放在次日早上 08:00 | IBKR 当天的报表次日才有；等 07:30 补跑完再写，报的是前一交易日的完整数据 |
+| 日报的数字由程序算，文字由 Hermes 写 | `get_daily_summary` 给出确定的数字（盈亏已剔除资金进出、变动最大的持仓、新出现的提示），Hermes 只负责组织语言，减少编造数字的空间 |
+| 网页显示日报一律转义 | 正文是 AI 写的，按纯文本显示，不当作 HTML |
 | 部署用 systemd 用户服务 + uv，不用 Docker | 服务器上 Hermes 已经这样跑；没有 Docker，单用户单进程不需要容器 |
 | 定时任务用 systemd 定时器，不在网页进程里跑 | 网页重启不影响同步；每次运行的日志和成败在 journalctl 里可见；`Persistent=true` 关机错过的会补跑。SQLite 已开 WAL，两个进程同时访问没问题 |
 | IBKR 次日早上单独补跑 | 当天 17:45 只能拿到前一天的报表（标记沿用）；次日补跑把前一估值日换成真实数据，其他数据源不动 |

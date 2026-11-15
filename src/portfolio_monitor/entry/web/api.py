@@ -58,6 +58,24 @@ async def alerts(request: Request, date: dt.date | None = None):
     return _ok(_app(request).risk.alerts(date))
 
 
+@router.get("/daily-summary")
+async def daily_summary(request: Request, date: dt.date | None = None):
+    return _ok(_app(request).reports.summary(date))
+
+
+@router.get("/reports")
+async def reports(request: Request, limit: int = 30):
+    return _ok(_app(request).reports.recent(min(max(limit, 1), 200)))
+
+
+@router.get("/reports/{day}")
+async def report(request: Request, day: dt.date):
+    found = _app(request).reports.get(day)
+    if found is None:
+        raise LookupError(f"{day} 没有日报")
+    return _ok(found)
+
+
 @router.get("/curve")
 async def curve(request: Request, range: str = "all", date: dt.date | None = None):
     return _ok(_app(request).query.curve(range, date))
