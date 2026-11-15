@@ -102,6 +102,10 @@ include_in_returns = false
 # crypto = 0.20
 # cash = 0.20
 
+# 手动账户：持仓价格每日自动从 Yahoo 更新（美股、港股、A 股、新加坡、加密货币），取不到时用手填价格
+# [sources.manual]
+# auto_price = true
+
 [sources.fake]
 start = "2025-01-01"
 monthly_deposit = 2000

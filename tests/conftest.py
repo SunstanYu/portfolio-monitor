@@ -20,7 +20,10 @@ def repo() -> Repository:
 
 
 def make_app(tmp_path: Path, config: dict) -> App:
-    settings = parse_settings({"fx": {"provider": "static"}, **config}, config_path=None, root=tmp_path)
+    # 测试不访问网络：手动账户默认不去 Yahoo 取价（需要时在 config 里显式打开并注入假的行情）
+    sources = {"manual": {"auto_price": False}, **config.get("sources", {})}
+    settings = parse_settings({"fx": {"provider": "static"}, **config, "sources": sources},
+                              config_path=None, root=tmp_path)
     settings = dataclasses.replace(settings, data_dir=tmp_path / "data")
     return open_app(settings, fx=StaticFx())
 
