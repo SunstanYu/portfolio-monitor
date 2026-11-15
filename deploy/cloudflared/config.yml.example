@@ -1,0 +1,14 @@
+# 复制到 ~/.cloudflared/portfolio.yml，把 <TUNNEL_ID> 和域名换成自己的
+# 建隧道：cloudflared tunnel login → cloudflared tunnel create portfolio
+# 先在 Cloudflare Zero Trust 里给这个域名配好 Access（只放行自己的邮箱），再 cloudflared tunnel route dns
+tunnel: <TUNNEL_ID>
+credentials-file: /home/<用户>/.cloudflared/<TUNNEL_ID>.json
+
+ingress:
+  # MCP 不经隧道：只给本机的 Hermes / Claude Code 用（程序本身也拒绝非本机 Host 的 MCP 请求）
+  - hostname: portfolio.example.com
+    path: ^/mcp
+    service: http_status:404
+  - hostname: portfolio.example.com
+    service: http://127.0.0.1:8000
+  - service: http_status:404

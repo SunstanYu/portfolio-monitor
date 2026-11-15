@@ -23,6 +23,7 @@ uv run portfolio-monitor holdings --by asset_class      # 持仓：instrument_id
 uv run portfolio-monitor performance --last 20          # TWR 收益率序列
 uv run portfolio-monitor alerts [--date ...] [--recheck]   # 风险提示；--recheck 用当前阈值重算（不重新拉数据）
 uv run portfolio-monitor migrate                        # 初始化 / 升级数据库
+uv run portfolio-monitor backup [--keep 30]             # 在线备份数据库到 data/backups，清理旧的自动备份
 uv run portfolio-monitor serve [--host 127.0.0.1 --port 8000]   # 启动网页和 MCP（默认只监听本机）
 ```
 
@@ -114,6 +115,23 @@ cash = 0.2
 ```
 
 改完运行 `alerts --recheck` 立即按新阈值重算今天的提示；网页服务在启动时读配置，重启后才对网页上的修改生效。
+
+## 部署（服务器）
+
+systemd 用户服务 + uv，单元文件和脚本在 `deploy/`。网页和 MCP 只监听 `127.0.0.1:8000`，外部经 Cloudflare Tunnel + Access 访问网页；`/mcp` 不经隧道。
+
+1. 代码克隆到 `~/portfolio-monitor`；把 `local/config.toml` 和 `.env` 放好（不进 git）；需要时把数据库拷到 `data/portfolio.sqlite`
+2. `deploy/install.sh`：装依赖、升级数据库、安装并启用服务和定时器（可重复运行）
+3. Cloudflare：`cloudflared tunnel login` → `cloudflared tunnel create portfolio` → 按 `deploy/cloudflared/config.yml.example` 写 `~/.cloudflared/portfolio.yml` → **先在 Zero Trust 里给域名配好 Access** → `cloudflared tunnel route dns portfolio portfolio.<你的域名>` → 再跑一次 `deploy/install.sh` 启用隧道服务
+4. 以后更新：`deploy/update.sh`
+
+```bash
+systemctl --user list-timers 'portfolio-monitor-*'      # 定时任务的下次运行时间
+journalctl --user -u portfolio-monitor-sync -n 50        # 最近一次同步的输出
+uv run --env-file .env portfolio-monitor backup          # 手动备份（定时器每天也会做）
+```
+
+在 Mac 上访问服务器的 MCP：`ssh -N -L 8000:127.0.0.1:8000 <服务器>` 后照常连 `http://127.0.0.1:8000/mcp`。
 
 ## 配置与凭据
 

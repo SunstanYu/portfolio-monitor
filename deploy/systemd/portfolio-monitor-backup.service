@@ -1,0 +1,8 @@
+# 在线备份数据库到 data/backups（不停服务），保留 30 天
+[Unit]
+Description=portfolio-monitor 数据库备份
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/portfolio-monitor
+ExecStart=%h/.local/bin/uv run --frozen --env-file .env portfolio-monitor backup --keep 30

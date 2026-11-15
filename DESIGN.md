@@ -96,8 +96,8 @@ AWS 服务器（安全组不开放入站端口）
 │ portfolio-monitor（单个 Python 进程，监听 127.0.0.1:8000）│
 │  ├─ 网页：仪表盘、账户明细与编辑、修改日志、同步状态   │
 │  ├─ /mcp：MCP（streamable HTTP + Bearer token）        │
-│  ├─ 定时：每日同步 → 快照 → 汇率 → 净值 → 规则         │
-│  └─ SQLite                                             │
+│  └─ SQLite（WAL）                                      │
+│ systemd 定时器：每日同步 / IBKR 次日补跑 / 每日备份    │
 │        ▲ MCP（本机）                                   │
 │ Hermes 网关 ──┤  Telegram（白名单只有你）、每日日报定时 │
 │ Claude Code ──┘  临时深入分析                           │
@@ -107,7 +107,7 @@ AWS 服务器（安全组不开放入站端口）
                   你的 Mac / 手机浏览器
 ```
 
-技术栈：Python 3.12 + uv、FastAPI、Pydantic、Jinja2 模板 + HTMX（无前端构建）、Tabulator（表格）、ECharts（图表）、SQLite、官方 MCP Python SDK、进程内定时任务。前端库随项目分发，不依赖 CDN。
+技术栈：Python 3.12 + uv、FastAPI、Pydantic、Jinja2 模板 + HTMX（无前端构建）、Tabulator（表格）、ECharts（图表）、SQLite、官方 MCP Python SDK；定时任务用 systemd 定时器调用命令行。前端库随项目分发，不依赖 CDN。
 
 ### 6.1 分层：依赖只能向下
 
@@ -266,11 +266,22 @@ HOLDINGS = TableSpec(
 
 ## 9. 部署（AWS + Cloudflare）
 
-- 服务器：AWS（具体主机见 `local/private.md`）
-- 进程托管：Docker 单容器或 systemd + uv，部署时定
+- 服务器：AWS Lightsail（具体主机见 `local/private.md`），和 Hermes 同一台
+- 进程托管：systemd 用户服务 + uv（与 Hermes 一致；开启 linger 后开机自启），单元文件和脚本在 `deploy/`：
+
+  | 单元 | 作用 | 时间（美东） |
+  |---|---|---|
+  | `portfolio-monitor-web` | 网页和 MCP，只监听 127.0.0.1:8000，崩溃自动重启 | 常驻 |
+  | `portfolio-monitor-sync.timer` | 每日同步 | 周一至周五 17:45 |
+  | `portfolio-monitor-ibkr.timer` | 只给 IBKR 补跑前一估值日（当天报表次日才有） | 周二至周六 07:30 |
+  | `portfolio-monitor-backup.timer` | 在线备份 SQLite 到 `data/backups`，保留 30 天 | 每天 18:30 |
+  | `portfolio-monitor-tunnel` | Cloudflare Tunnel | 常驻 |
+
+- 安装 / 更新：`deploy/install.sh`（可重复运行）、`deploy/update.sh`（拉代码后重装）
 - Cloudflare Tunnel：`portfolio.<你的域名>` → `http://127.0.0.1:8000`；ingress 规则对 `/mcp` 返回 404，MCP 不经隧道
-- Cloudflare Access：策略只允许你的邮箱；会话时长按需设置
-- 备份：每日备份 SQLite；服务器磁盘开启加密
+- Cloudflare Access：策略只允许你的邮箱；**先配好 Access 再加 DNS 记录**，网页不会有没保护的时候
+- 数据：服务器是唯一的数据来源；Mac 本机只用演示数据开发，查询真实数据经网页或 SSH 端口转发访问服务器的 MCP
+- 备份：每日在线备份 SQLite（校验后才保留，权限 600）；异地备份用 Lightsail 自动快照
 
 ## 10. Hermes 接入
 
@@ -287,7 +298,8 @@ HOLDINGS = TableSpec(
 - [ ] Cloudflare Access 只放行你的邮箱；`/mcp` 不经隧道
 - [ ] Telegram 白名单只有你
 - [ ] MCP 写入只限手动账户，两步确认，可撤销
-- [ ] SQLite 每日备份
+- [ ] SQLite 每日备份；Lightsail 自动快照（异地）
+- [ ] Lightsail 防火墙：不用的 80 / 443 关掉，SSH 限定来源 IP
 
 ## 12. 里程碑
 
@@ -304,7 +316,6 @@ HOLDINGS = TableSpec(
 
 ## 13. 待你确认
 
-- 用哪台 AWS 服务器；Hermes 是否已安装
 - 目标资产配置（股票 / 债券 / 现金 / 加密的比例）；第 5 节阈值已按试算定了默认值，可在配置里改
 - 日报时间（默认美东 17:45，交易日）。实测美东 17:11 还取不到 IBKR 当天的报表，17:45 的同步里 IBKR 会是前一交易日的数据并标记沿用；可选：次日早上只给 IBKR 补跑前一估值日（`sync --date <前一日> --source ibkr`，其他账户不动），或把日报改到次日早上
 - 盈立新加坡资金流水接口在新加坡服务器上的正确地址（文档写的地址返回 450404，需问盈立 API 客服）
@@ -353,6 +364,10 @@ HOLDINGS = TableSpec(
 | 自动价格只写进快照，不改手填价格 | 修改记录和撤销只针对用户的操作；行情取不到时有可退回的价格 |
 | 行情报价按估值日缓存 30 分钟 | 网页上每次修改都会刷新手动账户快照，不必每次都去 Yahoo 取价 |
 | 测试和演示默认关掉自动价格 | 不访问网络，结果可重复；需要时注入假的行情 |
+| 部署用 systemd 用户服务 + uv，不用 Docker | 服务器上 Hermes 已经这样跑；没有 Docker，单用户单进程不需要容器 |
+| 定时任务用 systemd 定时器，不在网页进程里跑 | 网页重启不影响同步；每次运行的日志和成败在 journalctl 里可见；`Persistent=true` 关机错过的会补跑。SQLite 已开 WAL，两个进程同时访问没问题 |
+| IBKR 次日早上单独补跑 | 当天 17:45 只能拿到前一天的报表（标记沿用）；次日补跑把前一估值日换成真实数据，其他数据源不动 |
+| 先配 Access 再加 DNS 记录 | 网页本身没有登录，DNS 一生效就能被访问 |
 | 规则阈值分提示 / 严重两级，按真实数据试算定默认值 | 波动大的组合用教科书阈值会天天触发；两级让"已经知道的状态"和"需要马上看"分开 |
 | 提示按估值日存表，记从哪天起连续出现 | 日报和 Telegram 只推新出现或升级的提示，持续中的不重复打扰 |
 | 规则在同步最后执行，出错不回滚同步 | 快照和净值已经写好，规则坏了不该让数据丢失；同步结果标为失败并写明原因 |

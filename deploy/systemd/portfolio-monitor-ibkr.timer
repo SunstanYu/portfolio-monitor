@@ -1,0 +1,9 @@
+[Unit]
+Description=portfolio-monitor 给 IBKR 补跑前一天（美东周二到周六 07:30）
+
+[Timer]
+OnCalendar=Tue..Sat 07:30 America/New_York
+Persistent=true
+
+[Install]
+WantedBy=timers.target

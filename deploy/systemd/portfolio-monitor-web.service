@@ -1,0 +1,15 @@
+# 网页和 MCP：只监听本机，外部经 Cloudflare Tunnel 访问网页；/mcp 只给本机的 Hermes / Claude Code
+[Unit]
+Description=portfolio-monitor 网页和 MCP（127.0.0.1:8000）
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/portfolio-monitor
+ExecStart=%h/.local/bin/uv run --frozen --env-file .env portfolio-monitor serve --host 127.0.0.1 --port 8000
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target

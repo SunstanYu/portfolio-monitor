@@ -51,6 +51,16 @@ def section(title: str) -> None:
 
 # ---------- 命令 ----------
 
+def cmd_backup(app: App, args: argparse.Namespace) -> int:
+    from portfolio_monitor.storage.db import backup
+
+    target, removed = backup(app.repo.conn, app.settings.data_dir / "backups", keep_days=args.keep)
+    print(f"备份：{target}（{target.stat().st_size / 1024:.0f} KB，已校验）")
+    if removed:
+        print(f"删掉 {len(removed)} 个超过 {args.keep} 天的旧备份")
+    return 0
+
+
 def cmd_migrate(app: App, _: argparse.Namespace) -> int:
     from portfolio_monitor.storage.db import schema_version
 
@@ -313,6 +323,8 @@ def build_parser() -> argparse.ArgumentParser:
     date_arg = {"type": dt.date.fromisoformat, "help": "估值日 YYYY-MM-DD"}
 
     sub.add_parser("migrate", help="初始化 / 升级数据库")
+    p = sub.add_parser("backup", help="在线备份数据库到 data/backups（不停服务），并清理旧备份")
+    p.add_argument("--keep", type=int, default=30, help="保留最近几天的自动备份（默认 30）")
     p = sub.add_parser("sync", help="运行一次每日同步")
     p.add_argument("--date", **date_arg)
     p.add_argument("--source", help="只同步这一个数据源（如次日早上给 IBKR 补跑前一估值日）")
@@ -348,7 +360,7 @@ def _server_args(p: argparse.ArgumentParser) -> None:
 
 
 COMMANDS = {
-    "migrate": cmd_migrate, "sync": cmd_sync, "backfill": cmd_backfill, "overview": cmd_overview,
+    "migrate": cmd_migrate, "backup": cmd_backup, "sync": cmd_sync, "backfill": cmd_backfill, "overview": cmd_overview,
     "holdings": cmd_holdings, "performance": cmd_performance, "serve": cmd_serve, "alerts": cmd_alerts,
 }
 
