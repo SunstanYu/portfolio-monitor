@@ -229,7 +229,8 @@ def _demo_config(start: dt.date, fail_on: dt.date) -> dict:
              "currency": "HKD", "include_in_returns": False},
         ],
         "sources": {"fake": {"start": start.isoformat(), "monthly_deposit": 2000,
-                             "fail_on": [fail_on.isoformat()]}},
+                             "fail_on": [fail_on.isoformat()]},
+                    "manual": {"auto_price": False}},  # 演示不访问网络，用手填价格
     }
 
 

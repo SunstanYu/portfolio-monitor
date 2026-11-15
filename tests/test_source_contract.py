@@ -52,7 +52,7 @@ def _manual(repo: Repository) -> tuple[Source, list[Account]]:
     repo.set_manual_holding("m-cn", "CN:600036", 100, 40.0, "CNY", cost_basis=3800.0)
     repo.set_manual_cash("m-cn", "CNY", 1000.0)
     repo.set_manual_cash("m-bank", "HKD", 5000.0)
-    return ManualSource(SourceContext(repo=repo)), accounts
+    return ManualSource(SourceContext(repo=repo, settings={"auto_price": False})), accounts
 
 
 def _ibkr(repo: Repository) -> tuple[Source, list[Account]]:
