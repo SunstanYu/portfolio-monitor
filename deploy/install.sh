@@ -24,6 +24,11 @@ systemctl --user daemon-reload
 systemctl --user enable --now portfolio-monitor-web.service \
   portfolio-monitor-sync.timer portfolio-monitor-ibkr.timer portfolio-monitor-backup.timer
 systemctl --user restart portfolio-monitor-web.service
+# Hermes 的日报技能（Hermes 装在同一台机器时）；定时任务只需建一次，见 README
+if [ -d "$HOME/.hermes/skills" ]; then
+  install -D -m 644 deploy/hermes/portfolio-daily-report/SKILL.md \
+    "$HOME/.hermes/skills/portfolio-daily-report/SKILL.md"
+fi
 if [ -f "$HOME/.cloudflared/portfolio.yml" ]; then
   systemctl --user enable --now portfolio-monitor-tunnel.service
 else

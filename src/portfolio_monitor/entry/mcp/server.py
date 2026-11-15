@@ -28,6 +28,7 @@ from portfolio_monitor.app import App
 from portfolio_monitor.domain.models import AssetClass
 from portfolio_monitor.services.edit import ChangeView, EditError
 from portfolio_monitor.services.query import RANGES, AccountSummary, CurvePoint, MonthReturn, Overview
+from portfolio_monitor.services.report import DailyReport, DailySummary, SavedReport
 from portfolio_monitor.services.risk import AlertsResult
 
 MIN_TOKEN_LENGTH = 32
@@ -38,11 +39,14 @@ INSTRUCTIONS = """\
 只能用 record_cash_flow 记入金出金，且只记流水、不改现金。修改分两步：
 1. 调用 set_holding / remove_holding / set_cash_balance / record_cash_flow，得到 change_id 和"改前 → 改后"的预览；
 2. 把预览原样告诉用户，等用户明确同意后再调用 confirm_change(change_id)。
-待确认的修改 30 分钟后作废。undo_change 会立即撤销一次已生效的修改，调用前同样要先征得用户同意。"""
+待确认的修改 30 分钟后作废。undo_change 会立即撤销一次已生效的修改，调用前同样要先征得用户同意。
+日报：先调用 get_daily_summary 拿数据，写好后用 save_daily_report 保存（网页同步显示，同一估值日覆盖）。日报只陈述数据，不给买卖建议。"""
 
 READ = ToolAnnotations(read_only_hint=True, open_world_hint=False)
 PREVIEW = ToolAnnotations(read_only_hint=False, destructive_hint=False, idempotent_hint=False,
                           open_world_hint=False)
+SAVE = ToolAnnotations(read_only_hint=False, destructive_hint=False, idempotent_hint=True,
+                       open_world_hint=False)
 APPLY = ToolAnnotations(read_only_hint=False, destructive_hint=True, idempotent_hint=False,
                         open_world_hint=False)
 
@@ -179,6 +183,32 @@ def build_mcp(pm: App) -> MCPServer:
     ) -> ChangesResult:
         """手动账户的修改记录（新到旧）：来源、内容摘要、状态（待确认 / 已生效 / 已撤销 / 已放弃）、能否撤销。"""
         return ChangesResult(changes=edit.list(account_id=account_id, limit=limit))
+
+    @mcp.tool(title="日报数据", annotations=READ)
+    @_friendly
+    async def get_daily_summary(date: DateArg = None) -> DailySummary:
+        """写日报用的结构化数据（默认最新估值日）：总资产和投资资产、当日盈亏（已剔除资金进出）和收益率、今年 / 累计收益、
+        回撤；各账户市值和当日变动、是否沿用旧数据；市值变动最大的持仓；资产分配；风险提示（new / escalated 标出新出现和升级）；
+        资金进出；各数据源同步状态。金额字段带 _usd 的是美元，比例为小数。"""
+        return pm.reports.summary(date)
+
+    @mcp.tool(title="保存日报", annotations=SAVE)
+    @_friendly
+    async def save_daily_report(
+        date: Annotated[dt.date, Field(description="估值日，用 get_daily_summary 返回的 as_of")],
+        content: Annotated[str, Field(description="日报正文（纯文本，可用简单的 Markdown），上限 20000 字")],
+    ) -> SavedReport:
+        """保存写好的日报，网页仪表盘同步显示；同一估值日重复保存会覆盖。"""
+        return pm.reports.save(date, content)
+
+    @mcp.tool(title="读取日报", annotations=READ)
+    @_friendly
+    async def get_daily_report(date: DateArg = None) -> DailyReport:
+        """读取已保存的日报，默认最新一篇。"""
+        report = pm.reports.get(date)
+        if report is None:
+            raise LookupError(f"{date} 没有日报" if date else "还没有日报")
+        return report
 
     @mcp.tool(title="风险提示", annotations=READ)
     @_friendly

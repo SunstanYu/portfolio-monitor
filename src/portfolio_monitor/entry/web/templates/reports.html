@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}日报 · 组合监测{% endblock %}
+{% block content %}
+<h1>日报</h1>
+{% if reports %}
+<div class="report-list">
+  {% for r in reports %}
+  <section class="card" aria-labelledby="report-{{ r.as_of }}">
+    <div class="card-head"><h2 id="report-{{ r.as_of }}">{{ r.as_of }}</h2></div>
+    <div class="report">{{ r.content }}</div>
+  </section>
+  {% endfor %}
+</div>
+{% else %}
+<p class="hint">还没有日报。Hermes 每个交易日次日早上写好后会保存在这里。</p>
+{% endif %}
+{% endblock %}

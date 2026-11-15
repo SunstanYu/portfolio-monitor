@@ -95,6 +95,10 @@ main { max-width: 1200px; margin: 0 auto; padding: 16px; display: grid; gap: 16p
 .flash-saved { background: var(--ok-wash); }
 .flash-undone { background: var(--surface); border: 1px solid var(--border); }
 
+/* 日报：正文是 Hermes 写的纯文本，按原样换行显示（已转义） */
+.report { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 14px; line-height: 1.65; }
+.report-list { display: grid; gap: 16px; }
+
 /* 风险提示 */
 .risk-list { list-style: none; margin: 0; padding: 0; }
 .risk-item { display: grid; grid-template-columns: auto 7.5em minmax(0, 1fr) auto; gap: 4px 12px; align-items: baseline; font-size: 13.5px; padding: 8px 0; border-top: 1px solid var(--border); }

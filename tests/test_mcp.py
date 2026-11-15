@@ -22,7 +22,7 @@ CONFIG = {
 }
 TOKEN = "test-token-" + "0" * 32
 READ_TOOLS = {"get_overview", "get_accounts", "get_account", "get_holdings", "get_performance",
-              "get_change_log", "get_risk_alerts"}
+              "get_change_log", "get_risk_alerts", "get_daily_summary", "get_daily_report"}
 PREVIEW_TOOLS = {"set_holding", "remove_holding", "set_cash_balance", "record_cash_flow"}
 
 
@@ -67,7 +67,8 @@ async def call_error(client: Client, tool: str, **args) -> str:
 @pytest.mark.anyio
 async def test_tools_and_hints(client):
     tools = {t.name: t for t in (await client.list_tools()).tools}
-    assert set(tools) == READ_TOOLS | PREVIEW_TOOLS | {"confirm_change", "discard_change", "undo_change"}
+    assert set(tools) == READ_TOOLS | PREVIEW_TOOLS | {"confirm_change", "discard_change", "undo_change",
+                                                     "save_daily_report"}
     for name, t in tools.items():
         assert t.annotations.read_only_hint is (name in READ_TOOLS), name
         assert t.description and t.title

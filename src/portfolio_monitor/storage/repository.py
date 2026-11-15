@@ -592,3 +592,26 @@ class Repository:
             n, err = out.get(src, (0, None))
             out[src] = (n + 1, err if n else r["error"])
         return out
+
+    # ---------- 日报 ----------
+
+    def save_report(self, as_of: date, content: str, source: str) -> bool:
+        """保存日报；返回是否覆盖了已有的。"""
+        day, now = _d(as_of), utc_now()
+        existed = self.conn.execute("SELECT 1 FROM daily_reports WHERE as_of=?", (day,)).fetchone() is not None
+        with transaction(self.conn):
+            self.conn.execute(
+                "INSERT INTO daily_reports (as_of, content, source, created_at, updated_at) VALUES (?,?,?,?,?)"
+                " ON CONFLICT(as_of) DO UPDATE SET content=excluded.content, source=excluded.source,"
+                " updated_at=excluded.updated_at",
+                (day, content, source, now, now),
+            )
+        return existed
+
+    def get_report(self, as_of: date) -> dict[str, Any] | None:
+        row = self.conn.execute("SELECT * FROM daily_reports WHERE as_of=?", (_d(as_of),)).fetchone()
+        return dict(row) if row else None
+
+    def list_reports(self, limit: int = 30) -> list[dict[str, Any]]:
+        rows = self.conn.execute("SELECT * FROM daily_reports ORDER BY as_of DESC LIMIT ?", (limit,))
+        return [dict(r) for r in rows]

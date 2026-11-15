@@ -16,6 +16,7 @@
       <a class="brand" href="/">组合监测</a>
       <nav>
         <a href="/" {% if page == 'dashboard' %}aria-current="page"{% endif %}>总览</a>
+        <a href="/reports" {% if page == 'reports' %}aria-current="page"{% endif %}>日报</a>
         <a href="/changes" {% if page == 'changes' %}aria-current="page"{% endif %}>修改记录</a>
         <a href="/sync" {% if page == 'sync' %}aria-current="page"{% endif %}>同步状态</a>
       </nav>
