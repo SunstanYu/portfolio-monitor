@@ -96,3 +96,41 @@ def migrate(conn: sqlite3.Connection) -> list[str]:
 def schema_version(conn: sqlite3.Connection) -> int:
     row = conn.execute("SELECT COALESCE(MAX(version), 0) FROM schema_migrations").fetchone()
     return int(row[0])
+
+
+# ---------- 备份 ----------
+
+BACKUP_NAME = re.compile(r"^portfolio-(\d{8})-(\d{6})\.sqlite$")  # 只清理这种名字；手动起名的备份不动
+
+
+def backup(conn: sqlite3.Connection, folder: Path, *, keep_days: int = 30,
+           now: datetime | None = None) -> tuple[Path, list[Path]]:
+    """在线备份（不停服务）到 folder/portfolio-YYYYMMDD-HHMMSS.sqlite，校验后删掉超过 keep_days 天的旧备份。
+
+    返回 (新备份路径, 删掉的旧备份)。备份文件权限 600。
+    """
+    now = now or datetime.now(UTC)
+    folder.mkdir(parents=True, exist_ok=True)
+    target = folder / f"portfolio-{now:%Y%m%d-%H%M%S}.sqlite"
+    tmp = target.with_suffix(".tmp")
+    dest = sqlite3.connect(str(tmp))
+    try:
+        conn.backup(dest)
+        dest.execute("PRAGMA journal_mode = DELETE")  # 备份是单个文件，不带 -wal
+        result = dest.execute("PRAGMA integrity_check").fetchone()[0]
+    finally:
+        dest.close()
+    if result != "ok":
+        tmp.unlink(missing_ok=True)
+        raise RuntimeError(f"备份校验失败：{result}")
+    tmp.chmod(0o600)
+    tmp.replace(target)
+
+    cutoff = now.date().toordinal() - keep_days
+    removed = []
+    for path in sorted(folder.iterdir()):
+        m = BACKUP_NAME.match(path.name)
+        if m and path != target and datetime.strptime(m.group(1), "%Y%m%d").date().toordinal() < cutoff:
+            path.unlink()
+            removed.append(path)
+    return target, removed

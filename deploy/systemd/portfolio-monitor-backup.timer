@@ -1,0 +1,9 @@
+[Unit]
+Description=portfolio-monitor 数据库备份（每天美东 18:30）
+
+[Timer]
+OnCalendar=*-*-* 18:30 America/New_York
+Persistent=true
+
+[Install]
+WantedBy=timers.target

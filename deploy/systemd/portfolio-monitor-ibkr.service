@@ -1,0 +1,11 @@
+# IBKR 当天的报表次日才有：第二天早上只给 IBKR 补跑前一估值日，其他数据源不动
+[Unit]
+Description=portfolio-monitor 给 IBKR 补跑前一天
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/portfolio-monitor
+ExecStart=/bin/sh -c 'exec %h/.local/bin/uv run --frozen --env-file .env portfolio-monitor sync --source ibkr --date "$(TZ=America/New_York date -d yesterday +%%F)"'
+TimeoutStartSec=20min

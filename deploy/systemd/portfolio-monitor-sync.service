@@ -1,0 +1,11 @@
+# 每日同步：各数据源 → 快照 → 汇率 → 净值 → 风险规则；有数据源失败时以失败结束（journalctl 里可见）
+[Unit]
+Description=portfolio-monitor 每日同步
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/portfolio-monitor
+ExecStart=%h/.local/bin/uv run --frozen --env-file .env portfolio-monitor sync
+TimeoutStartSec=20min

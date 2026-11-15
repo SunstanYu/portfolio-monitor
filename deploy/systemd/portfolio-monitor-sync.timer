@@ -1,0 +1,9 @@
+[Unit]
+Description=portfolio-monitor 每日同步（美东交易日 17:45）
+
+[Timer]
+OnCalendar=Mon..Fri 17:45 America/New_York
+Persistent=true
+
+[Install]
+WantedBy=timers.target
