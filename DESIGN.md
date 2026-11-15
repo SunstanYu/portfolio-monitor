@@ -288,6 +288,7 @@ HOLDINGS = TableSpec(
 
 - `~/.hermes/config.yaml` 的 `mcp_servers` 加入 `http://127.0.0.1:8000/mcp`，带 `Authorization: Bearer <MCP_TOKEN>`
 - Telegram 网关只允许你的用户 ID
+- 日报技能在 `deploy/hermes/portfolio-daily-report/SKILL.md`（`deploy/install.sh` 会装到 `~/.hermes/skills/`），改格式就改这个文件
 - 定时任务：交易日次日美东 08:00（周二至周六，IBKR 07:30 补跑之后，数据完整）调用 `get_daily_summary` → 按技能 `portfolio-daily-report` 写中文日报 → `save_daily_report` → 推送 Telegram
 - MCP 服务在 `config.yaml` 的 `mcp_servers.portfolio`，token 放在 `~/.hermes/.env`（`${PORTFOLIO_MCP_TOKEN}` 引用），只放行本项目的工具
 - 写入类操作一律先发预览，你在 Telegram 回复确认后再调用 `confirm_change`
@@ -314,7 +315,7 @@ HOLDINGS = TableSpec(
 | M5 | 数据源：IBKR（含一年回填）→ OKX → 盈立；手动持仓从 Yahoo 更新价格 | ✅ |
 | M6 | 风险规则 | ✅ |
 | M7 | 部署 AWS + Cloudflare Tunnel / Access + 备份 | |
-| M8 | Hermes：MCP、Telegram 白名单、每日日报 | |
+| M8 | Hermes：MCP、Telegram 白名单、每日日报 | ✅ |
 
 ## 13. 待你确认
 

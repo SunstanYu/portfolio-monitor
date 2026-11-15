@@ -53,6 +53,36 @@ claude mcp add --transport http portfolio http://127.0.0.1:8000/mcp --header "Au
 
 日报：Hermes 每个交易日次日早上调用 `get_daily_summary` 拿数据，写好后 `save_daily_report` 保存并推送到 Telegram；网页仪表盘和 `/reports` 同步显示。
 
+## Hermes 接入（服务器上）
+
+1. `~/.hermes/.env` 加 `PORTFOLIO_MCP_TOKEN=<和本项目 .env 的 MCP_TOKEN 相同>`
+2. `~/.hermes/config.yaml`：
+
+   ```yaml
+   mcp_servers:
+     portfolio:
+       url: http://127.0.0.1:8000/mcp
+       headers:
+         Authorization: "Bearer ${PORTFOLIO_MCP_TOKEN}"
+       tools:
+         include: [get_overview, get_accounts, get_account, get_holdings, get_performance, get_change_log,
+                   get_risk_alerts, get_daily_summary, get_daily_report, save_daily_report, set_holding,
+                   remove_holding, set_cash_balance, record_cash_flow, confirm_change, discard_change, undo_change]
+   ```
+
+3. 日报技能：`deploy/install.sh` 会把 `deploy/hermes/portfolio-daily-report/SKILL.md` 装到 `~/.hermes/skills/`
+4. 重启网关后建定时任务（只需一次）：
+
+   ```bash
+   systemctl --user restart hermes-gateway
+   hermes mcp test portfolio
+   hermes cron create "0 8 * * 2-6" "使用 portfolio-daily-report 技能，写并保存最新估值日的投资组合日报。最终回复只输出日报正文。" \
+     --name portfolio-daily-report --skill portfolio-daily-report --deliver telegram \
+     --timezone America/New_York --catch-up on
+   ```
+
+接上 MCP 后，任何能和 Hermes 对话的人都能查组合，所以 Telegram 白名单、微信配对只能有你本人。
+
 ## IBKR
 
 用 Flex Web Service 只读取数（Client Portal → Performance & Reports → Flex Queries）：
