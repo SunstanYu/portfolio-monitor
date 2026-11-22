@@ -230,11 +230,13 @@ def build_mcp(pm: App) -> MCPServer:
     async def add_journal_entry(
         content: Annotated[str, Field(description="用户的原话，一字不改：不总结、不润色、不纠错，保留换行")],
         sent_at: Annotated[dt.datetime | None, Field(
-            description="用户发这条消息的时间，ISO 8601 且带时区，如 2026-11-21T14:15:32+00:00；"
-                        "取自消息开头的时间戳。不填则用当前时间",
+            description="用户发这条消息的时间，ISO 8601 且带时区，如 2026-11-21T14:15:32+00:00；只能抄消息开头的时间戳"
+                        "（如 [Sat 2026-11-21 14:15:32 UTC]），没有就不填，不要用当前时间推算。不填则用当前时间",
         )] = None,
     ) -> JournalEntry:
-        """把用户的一段交易复盘 / 投资思考原样追加到复盘记录文件，按发送时间记（换算成纽约时间）。直接写入，不需要确认。"""
+        """把用户的一段交易复盘 / 投资思考原样追加到复盘记录文件，按发送时间记（换算成纽约时间）。直接写入，不需要确认。
+
+        成功后只回用户一句"已记录（recorded_at 的日期和时分，纽约时间）"，不需要回读核验，不要点评。"""
         return pm.journal.add(content, sent_at)
 
     # ----- 写入：先预览，confirm_change 后生效 -----

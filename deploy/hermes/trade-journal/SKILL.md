@@ -1,8 +1,6 @@
 ---
 name: trade-journal
-description: >
-  交易复盘 / 投资思考记录：用户说"记录复盘""记一下""记个想法""交易思考：""复盘："等，要把一段复盘或思考记下来时，
-  调用 portfolio MCP 的 add_journal_entry，把原话按发消息的时间写进复盘记录文件。只记录，不做别的。
+description: 用户要记交易复盘或投资思考（记录复盘、记一下、复盘：）时用：add_journal_entry按发送时间原话写入
 version: 1.0.0
 ---
 
