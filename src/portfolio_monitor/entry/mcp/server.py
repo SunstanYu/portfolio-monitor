@@ -27,6 +27,7 @@ from portfolio_monitor import __version__
 from portfolio_monitor.app import App
 from portfolio_monitor.domain.models import AssetClass
 from portfolio_monitor.services.edit import ChangeView, EditError
+from portfolio_monitor.services.journal import JournalEntry
 from portfolio_monitor.services.query import RANGES, AccountSummary, CurvePoint, MonthReturn, Overview
 from portfolio_monitor.services.report import DailyReport, DailySummary, SavedReport
 from portfolio_monitor.services.risk import AlertsResult
@@ -40,7 +41,9 @@ INSTRUCTIONS = """\
 1. 调用 set_holding / remove_holding / set_cash_balance / record_cash_flow，得到 change_id 和"改前 → 改后"的预览；
 2. 把预览原样告诉用户，等用户明确同意后再调用 confirm_change(change_id)。
 待确认的修改 30 分钟后作废。undo_change 会立即撤销一次已生效的修改，调用前同样要先征得用户同意。
-日报：先调用 get_daily_summary 拿数据，写好后用 save_daily_report 保存（网页同步显示，同一估值日覆盖）。日报只陈述数据，不给买卖建议。"""
+日报：先调用 get_daily_summary 拿数据，写好后用 save_daily_report 保存（网页同步显示，同一估值日覆盖）。日报只陈述数据，不给买卖建议。
+复盘记录：用户要记一段交易复盘或投资思考时，用 add_journal_entry 把原话一字不改地写入，sent_at 填这条消息的发送时间；
+直接写入，不需要确认，也不要点评。"""
 
 READ = ToolAnnotations(read_only_hint=True, open_world_hint=False)
 PREVIEW = ToolAnnotations(read_only_hint=False, destructive_hint=False, idempotent_hint=False,
@@ -49,6 +52,7 @@ SAVE = ToolAnnotations(read_only_hint=False, destructive_hint=False, idempotent_
                        open_world_hint=False)
 APPLY = ToolAnnotations(read_only_hint=False, destructive_hint=True, idempotent_hint=False,
                         open_world_hint=False)
+APPEND = PREVIEW  # 同样的提示：会写入、不改动已有内容、重复调用会重复写
 
 DateArg = Annotated[dt.date | None, Field(description="估值日 YYYY-MM-DD，默认最新估值日")]
 AccountArg = Annotated[str, Field(description="账户 id，见 get_accounts")]
@@ -218,6 +222,22 @@ def build_mcp(pm: App) -> MCPServer:
         每条有级别（warn 提示 / critical 严重）、当前值和越过的阈值（比例为小数）、从哪个估值日起连续出现（since）、
         是否今天新出现（new）、是否今天升级为严重（escalated）。阈值由用户在配置文件 [rules.*] 里设置。"""
         return pm.risk.alerts(date)
+
+    # ----- 复盘记录：直接追加，不需要确认 -----
+
+    @mcp.tool(title="记录复盘", annotations=APPEND)
+    @_friendly
+    async def add_journal_entry(
+        content: Annotated[str, Field(description="用户的原话，一字不改：不总结、不润色、不纠错，保留换行")],
+        sent_at: Annotated[dt.datetime | None, Field(
+            description="用户发这条消息的时间，ISO 8601 且带时区，如 2026-11-21T14:15:32+00:00；只能抄消息开头的时间戳"
+                        "（如 [Sat 2026-11-21 14:15:32 UTC]），没有就不填，不要用当前时间推算。不填则用当前时间",
+        )] = None,
+    ) -> JournalEntry:
+        """把用户的一段交易复盘 / 投资思考原样追加到复盘记录文件，按发送时间记（换算成纽约时间）。直接写入，不需要确认。
+
+        成功后只回用户一句"已记录（recorded_at 的日期和时分，纽约时间）"，不需要回读核验，不要点评。"""
+        return pm.journal.add(content, sent_at)
 
     # ----- 写入：先预览，confirm_change 后生效 -----
 

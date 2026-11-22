@@ -68,7 +68,7 @@ async def call_error(client: Client, tool: str, **args) -> str:
 async def test_tools_and_hints(client):
     tools = {t.name: t for t in (await client.list_tools()).tools}
     assert set(tools) == READ_TOOLS | PREVIEW_TOOLS | {"confirm_change", "discard_change", "undo_change",
-                                                     "save_daily_report"}
+                                                     "save_daily_report", "add_journal_entry"}
     for name, t in tools.items():
         assert t.annotations.read_only_hint is (name in READ_TOOLS), name
         assert t.description and t.title

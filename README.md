@@ -53,12 +53,17 @@ claude mcp add --transport http portfolio http://127.0.0.1:8000/mcp --header "Au
 
 日报：Hermes 每个交易日次日早上调用 `get_daily_summary` 拿数据，写好后 `save_daily_report` 保存并推送到 Telegram；网页仪表盘和 `/reports` 同步显示。
 
+复盘记录：在 Telegram 里对 Hermes 说"记录复盘：……"，它调用 `add_journal_entry`，把原话按发消息的时间（换算成纽约时间）追加到 `data/journal.txt`。这个文件不在数据库备份里。
+
 ## Hermes 接入（服务器上）
 
 1. `~/.hermes/.env` 加 `PORTFOLIO_MCP_TOKEN=<和本项目 .env 的 MCP_TOKEN 相同>`
 2. `~/.hermes/config.yaml`：
 
    ```yaml
+   gateway:
+     message_timestamps:
+       enabled: true          # 模型能看到每条消息的发送时间，复盘记录按它记
    mcp_servers:
      portfolio:
        url: http://127.0.0.1:8000/mcp
@@ -67,10 +72,11 @@ claude mcp add --transport http portfolio http://127.0.0.1:8000/mcp --header "Au
        tools:
          include: [get_overview, get_accounts, get_account, get_holdings, get_performance, get_change_log,
                    get_risk_alerts, get_daily_summary, get_daily_report, save_daily_report, set_holding,
-                   remove_holding, set_cash_balance, record_cash_flow, confirm_change, discard_change, undo_change]
+                   remove_holding, set_cash_balance, record_cash_flow, confirm_change, discard_change, undo_change,
+                   add_journal_entry]
    ```
 
-3. 日报技能：`deploy/install.sh` 会把 `deploy/hermes/portfolio-daily-report/SKILL.md` 装到 `~/.hermes/skills/`
+3. 技能：`deploy/install.sh` 会把 `deploy/hermes/` 下的技能装到 `~/.hermes/skills/`：日报 `portfolio-daily-report`、复盘记录 `trade-journal`
 4. 重启网关后建定时任务（只需一次）：
 
    ```bash

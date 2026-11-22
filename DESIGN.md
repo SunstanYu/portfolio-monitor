@@ -7,7 +7,7 @@
 - 每天自动汇总所有账户的持仓和现金，统一换算为 **USD**
 - 网页：资产分配现状、历史收益率曲线、回撤、风险提示；手动账户可直接在网页编辑
 - MCP：Hermes / Claude Code 查询组合状况，并能在确认后修改手动账户
-- Telegram（经 Hermes）：看日报、问问题、改持仓
+- Telegram（经 Hermes）：看日报、问问题、改持仓、记交易复盘
 - **不做**：交易下单、投资建议、多用户、注册登录
 
 ## 2. 账户与接入方式
@@ -46,6 +46,7 @@
 
 - 存储：SQLite 单文件 `data/portfolio.sqlite`
 - 原始返回：每次同步的原始 JSON / XML 存档到 `data/raw/<日期>/<数据源>`，便于排查
+- 复盘记录：纯文本 `data/journal.txt`，只追加，权限 600；不进数据库，不在每日备份里
 - 估值日：按美东日期；每日任务在美股收盘后运行
 - **手动持仓自动价格**：能换算成 Yahoo 代码的持仓（美股、港股、A 股、新加坡、加密货币），每日用估值日当天或之前最近一个交易日的收盘价代替手填价格；只写进快照、不改手填价格；取不到价格或币种不一致时沿用手填价格并提示（`[sources.manual].auto_price`，默认开）
 - **数据源失败**：沿用该账户最近一次快照并标记 `carried_forward`，净值标记为"含沿用数据"，不会凭空下跌
@@ -256,7 +257,7 @@ HOLDINGS = TableSpec(
 | `get_change_log`：修改记录 | `undo_change`：撤销一次已生效的修改 |
 | `get_risk_alerts`：风险提示，含级别、当前值、阈值、是否新出现 / 升级 | `save_daily_report`：保存 Hermes 写好的日报（同一天覆盖） |
 | `get_daily_summary`：日报所需的结构化数据：收益、当日盈亏、账户变动、市值变动最大的持仓、分配、风险提示、资金进出、数据状态 | |
-| `get_daily_report`：读取已保存的日报 | |
+| `get_daily_report`：读取已保存的日报 | `add_journal_entry`：把交易复盘 / 投资思考的原话按发送时间追加到 `data/journal.txt`（直接写入，不需确认） |
 
 - **两步写入**：写入类工具只返回"改前 → 改后"预览和 `change_id`（来源记为 mcp）；调用 `confirm_change(change_id)` 后才落库。撤销与网页一致，一步完成；服务端的说明（instructions）要求模型确认和撤销前都先征得用户同意
 - **鉴权**：`Authorization: Bearer <MCP_TOKEN>`，至少 32 个字符；未设置时不开放 `/mcp`。不用 SDK 的 OAuth 资源服务器，那套需要另有授权服务器，单用户静态 token 用不上
@@ -292,6 +293,8 @@ HOLDINGS = TableSpec(
 - 定时任务：交易日次日美东 08:00（周二至周六，IBKR 07:30 补跑之后，数据完整）调用 `get_daily_summary` → 按技能 `portfolio-daily-report` 写中文日报 → `save_daily_report` → 推送 Telegram
 - MCP 服务在 `config.yaml` 的 `mcp_servers.portfolio`，token 放在 `~/.hermes/.env`（`${PORTFOLIO_MCP_TOKEN}` 引用），只放行本项目的工具
 - 写入类操作一律先发预览，你在 Telegram 回复确认后再调用 `confirm_change`
+- 复盘记录技能在 `deploy/hermes/trade-journal/SKILL.md`：你说"记录复盘：……"，Hermes 原话照录，调用 `add_journal_entry`，只回一句"已记录（时间）"
+- `config.yaml` 打开 `gateway.message_timestamps.enabled`：模型看到的每条消息前面带 Telegram 给的发送时间（如 `[Sat 2026-11-21 14:15:32 UTC]`），复盘按它记
 
 ## 11. 安全清单
 
@@ -314,8 +317,9 @@ HOLDINGS = TableSpec(
 | M4 | MCP 端点，本机用 Claude Code 测试 | ✅ |
 | M5 | 数据源：IBKR（含一年回填）→ OKX → 盈立；手动持仓从 Yahoo 更新价格 | ✅ |
 | M6 | 风险规则 | ✅ |
-| M7 | 部署 AWS + Cloudflare Tunnel / Access + 备份 | |
+| M7 | 部署 AWS + Cloudflare Tunnel / Access + 备份 | ✅ |
 | M8 | Hermes：MCP、Telegram 白名单、每日日报 | ✅ |
+| M9 | 复盘记录：Telegram 里让 Hermes 把交易复盘 / 思考按发送时间记进文本文件 | ✅ |
 
 ## 13. 待你确认
 
@@ -369,6 +373,8 @@ HOLDINGS = TableSpec(
 | 日报放在次日早上 08:00 | IBKR 当天的报表次日才有；等 07:30 补跑完再写，报的是前一交易日的完整数据 |
 | 日报的数字由程序算，文字由 Hermes 写 | `get_daily_summary` 给出确定的数字（盈亏已剔除资金进出、变动最大的持仓、新出现的提示），Hermes 只负责组织语言，减少编造数字的空间 |
 | 网页显示日报一律转义 | 正文是 AI 写的，按纯文本显示，不当作 HTML |
+| 复盘记录由 MCP 工具写文件，不让 Hermes 自己写 | 时间格式、时区换算、只追加由程序保证；Hermes 用文件工具追加可能整个覆盖，格式也难一致 |
+| 复盘按消息发送时间记，不按处理时间 | 网关积压、重启后才处理的消息也记在你发它的时间；发送时间由 Hermes 从消息时间戳转填，缺了才用当前时间，并在回复里说明 |
 | 部署用 systemd 用户服务 + uv，不用 Docker | 服务器上 Hermes 已经这样跑；没有 Docker，单用户单进程不需要容器 |
 | 定时任务用 systemd 定时器，不在网页进程里跑 | 网页重启不影响同步；每次运行的日志和成败在 journalctl 里可见；`Persistent=true` 关机错过的会补跑。SQLite 已开 WAL，两个进程同时访问没问题 |
 | IBKR 次日早上单独补跑 | 当天 17:45 只能拿到前一天的报表（标记沿用）；次日补跑把前一估值日换成真实数据，其他数据源不动 |
